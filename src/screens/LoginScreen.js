@@ -1,20 +1,57 @@
-import React from 'react';
+import {React, useState, useEffect } from 'react';
 import { View, Text, Image, StyleSheet, TouchableOpacity } from 'react-native';
+import {collection, getDocs, addDoc} from 'firebase/firestore';
+import { db } from '../index';
 
 export default function LoginScreen({ navigation }) {
+
+  //TEST FUNCTION -- Fetch users from database after clicking "Sign Up Button"
+  const fetchUserData = async () => {
+    try {
+      const querySnapshot = await getDocs(collection(db, 'users'));
+    // Process each document in the collection
+    querySnapshot.forEach((doc) => {
+      console.log(`${doc.id} => ${JSON.stringify(doc.data())}`);
+      // You can also save data to state or perform other operations here
+    });
+  } catch (error) {
+    console.error("Error fetching user data: ", error);
+  }
+}
+
+//TEST FUNCTION -- Store fake user to database after clicking "Sign Up Button"
+const addFakeUser = async () => {
+  try {
+    // Define a fake user object
+    const fakeUser = {
+      name: "John Doe",
+      email: "johndoe@example.com",
+      password: "fakepassword", // You should hash passwords in a real app, this is for testing
+      createdAt: new Date(),  // Add timestamp of when the user was created
+    };
+
+    // Add the fake user to the 'users' collection in Firestore
+    const docRef = await addDoc(collection(db, 'users'), fakeUser);
+    console.log("Fake user added with ID: ", docRef.id);  // Log the document ID
+
+  } catch (error) {
+    console.error("Error adding fake user: ", error);
+  }
+};
+
   return (
     <View style={styles.container}>
       {/* Cropped Logo GIF */}
       <View style={styles.logoContainer}>
         <Image
-          source={require('../assets/logo/SoundScout.gif')}
+          source={require('../../assets/logo/SoundScout.gif')}
           style={styles.logo}
         />
       </View>
 
       {/* Bottom Button Container */}
       <View style={styles.bottomContainer}>
-        <TouchableOpacity style={styles.signUpButton}>
+        <TouchableOpacity style={styles.signUpButton} onPress={addFakeUser}>
           <Text style={styles.buttonText}>Sign Up</Text>
         </TouchableOpacity>
 
