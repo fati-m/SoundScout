@@ -24,9 +24,9 @@ const addFakeUser = async () => {
   try {
     // Define a fake user object
     const fakeUser = {
-      name: "John Doe",
-      email: "johndoe@example.com",
-      password: "fakepassword", // You should hash passwords in a real app, this is for testing
+      name: "John Adaams",
+      email: "admas123@example.com",
+      password: "anotherpassword", // You should hash passwords in a real app, this is for testing
       createdAt: new Date(),  // Add timestamp of when the user was created
     };
 
@@ -57,7 +57,7 @@ const addFakeUser = async () => {
 
         <Text style={styles.subText}>Already have an account?</Text>
 
-        <TouchableOpacity onPress={() => {/* Navigate or sign-in logic */}}>
+        <TouchableOpacity onPress={() => {navigation.navigate('SignIn')}}>
           <Text style={styles.signInText}>Sign In</Text>
         </TouchableOpacity>
       </View>
