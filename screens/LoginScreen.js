@@ -1,73 +1,58 @@
-import React, { useRef, useState } from 'react';
-import { View, Text, Image, StyleSheet, TouchableOpacity, FlatList, Dimensions } from 'react-native';
+import React, { useEffect } from 'react';
+import { View, Text, Image, StyleSheet, TouchableOpacity } from 'react-native';
+import { useAuthRequest, makeRedirectUri } from 'expo-auth-session';
+import { initiateSpotifyAuth, handleAuthCallback, getUserProfile } from '../api/spotify';
 
-const { width, height } = Dimensions.get("screen");
+const LoginScreen = ({ navigation }) => {
+  const discovery = {
+    authorizationEndpoint: 'https://accounts.spotify.com/authorize',
+    tokenEndpoint: 'https://accounts.spotify.com/api/token',
+  };
 
-export default function LoginScreen({ navigation }) {
-  const carouselItems = [
+  const clientId = '6418fb58c7fe4f60bddd2d5a5a970888';
+  const redirectUri = makeRedirectUri({ scheme: 'soundscout' });
+
+  const [request, response, promptAsync] = useAuthRequest(
     {
-      id: '1',
-      title: 'Welcome to SoundScout!',
-      subText: 'Step into a world where music is more than just sound—it\'s a journey. Explore fresh tracks from your local scene and beyond, handpicked for your unique taste. Whether it\'s indie vibes from a nearby café or the latest club beats, we\'ve got your next favorite song waiting.',
-      image: require('../assets/logo/SoundScout.gif'),
-      imageStyle: {
-        width: 300,
-        height: 200,
-        resizeMode: 'cover',
-      },
+      clientId,
+      scopes: ['user-read-private', 'user-read-email'],
+      redirectUri,
+      usePKCE: true,
     },
-    {
-      id: '2',
-      title: 'Discover, Like, Share!',
-      subText: 'Dive into genres you know and uncover sounds you\'ve never imagined. Like what you hear? Show some love by liking tracks and creating a playlist of your new discoveries. Music is just the beginning—connect with fellow listeners and share the vibe.',
-      image: require('../assets/logo/together3.jpg'),
-      imageStyle: {
-        width: 300,
-        height: 200,
-        borderRadius: 20,
-        resizeMode: 'cover',
-      },
-    },
-    {
-      id: '3',
-      title: 'Let’s Get Started',
-      subText: 'Ready to discover your next favorite track? Let\'s dive in and explore the sounds around you. Join a world of music, connect with others, and make every beat count.',
-      image: require('../assets/logo/together4.jpg'),
-      imageStyle: {
-        width: 300,
-        height: 200,
-        borderRadius: 20,
-        resizeMode: 'cover',
-      },
-    },
-  ];
-
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const flatListRef = useRef(null);
-
-  const onViewRef = React.useRef(({ viewableItems }) => {
-    if (viewableItems.length > 0) {
-      setCurrentIndex(viewableItems[0].index);
-    }
-  });
-  const viewConfigRef = React.useRef({ viewAreaCoveragePercentThreshold: 50 });
-
-  React.useEffect(() => {
-    const interval = setInterval(() => {
-      const nextIndex = (currentIndex + 1) % carouselItems.length;
-      flatListRef.current.scrollToIndex({ index: nextIndex, animated: true });
-    }, 10000);
-
-    return () => clearInterval(interval);
-  }, [currentIndex]);
-
-  const renderItem = ({ item }) => (
-    <View style={styles.carouselItem}>
-      <Image source={item.image} style={item.imageStyle} />
-      <Text style={styles.title}>{item.title}</Text>
-      <Text style={styles.subText1}>{item.subText}</Text>
-    </View>
+    discovery
   );
+
+  useEffect(() => {
+    if (response?.type === 'success' && response.params.code) {
+      const { code } = response.params;
+
+      console.log('Authorization Code:', code);
+
+      handleAuthCallback(code, request.codeVerifier)
+        .then(async (tokenResponse) => {
+          console.log('Access Token:', tokenResponse.access_token);
+
+          // Fetch and log user profile
+          const userProfile = await getUserProfile(tokenResponse.access_token);
+          console.log('User Profile:', userProfile);
+
+          navigation.navigate('Home', { token: tokenResponse.access_token });
+        })
+        .catch((error) => {
+          console.error('Error during token exchange:', error);
+        });
+    }
+  }, [response]);
+
+  const handleSpotifySignUp = async () => {
+    try {
+      const { url, codeVerifier } = await initiateSpotifyAuth();
+      console.log('Auth URL:', url);
+      promptAsync({ url });
+    } catch (error) {
+      console.error('Error initiating Spotify authentication:', error.message);
+    }
+  };
 
   return (
     <View style={styles.screenContainer}>
@@ -97,10 +82,15 @@ export default function LoginScreen({ navigation }) {
       </View>
 
       <View style={styles.bottomContainer}>
-        <TouchableOpacity style={styles.signUpButton}>
-          <Text style={styles.buttonText}>Sign Up</Text>
+        <TouchableOpacity
+          style={styles.signUpButton}
+          disabled={!request}
+          onPress={() => {
+            promptAsync();
+          }}
+        >
+          <Text style={styles.buttonText}>Sign Up with Spotify</Text>
         </TouchableOpacity>
-
         <Text style={styles.subText}>Already have an account?</Text>
 
         <TouchableOpacity>
@@ -109,7 +99,7 @@ export default function LoginScreen({ navigation }) {
       </View>
     </View>
   );
-}
+};
 
 const styles = StyleSheet.create({
   screenContainer: {
