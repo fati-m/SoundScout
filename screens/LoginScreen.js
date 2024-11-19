@@ -1,9 +1,13 @@
-import React, { useEffect } from 'react';
-import { View, Text, Image, StyleSheet, TouchableOpacity } from 'react-native';
+import React, { useRef, useState, useEffect } from 'react';
+import { View, Text, Image, StyleSheet, TouchableOpacity, FlatList, Dimensions } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuthRequest, makeRedirectUri } from 'expo-auth-session';
 import { initiateSpotifyAuth, handleAuthCallback, getUserProfile } from '../api/spotify';
+import SpotifyLogo from '../assets/2024-spotify-logo-icon/Primary_Logo_White_CMYK.svg'; 
 
-const LoginScreen = ({ navigation }) => {
+const { width, height } = Dimensions.get("screen");
+
+export default function LoginScreen({ navigation }) {
   const discovery = {
     authorizationEndpoint: 'https://accounts.spotify.com/authorize',
     tokenEndpoint: 'https://accounts.spotify.com/api/token',
@@ -26,20 +30,29 @@ const LoginScreen = ({ navigation }) => {
     if (response?.type === 'success' && response.params.code) {
       const { code } = response.params;
 
-      console.log('Authorization Code:', code);
-
       handleAuthCallback(code, request.codeVerifier)
         .then(async (tokenResponse) => {
-          console.log('Access Token:', tokenResponse.access_token);
+          const { access_token } = tokenResponse;
 
-          // Fetch and log user profile
-          const userProfile = await getUserProfile(tokenResponse.access_token);
-          console.log('User Profile:', userProfile);
+          // Save token to storage
+          await AsyncStorage.setItem('spotifyAccessToken', access_token);
 
-          navigation.navigate('Home', { token: tokenResponse.access_token });
+          // Fetch user profile
+          const userProfile = await getUserProfile(access_token);
+
+          // TODO: Check if the Spotify account is linked to a SoundScout account in Firebase
+          console.log('Spotify User Profile:', userProfile);
+
+          const isExistingAccount = false; // Placeholder for backend check
+          if (isExistingAccount) {
+            navigation.navigate('Map', { token: access_token });
+          } else {
+            console.log('No SoundScout account associated with this Spotify account.');
+            // Redirect or handle account creation flow here
+          }
         })
         .catch((error) => {
-          console.error('Error during token exchange:', error);
+          console.error('Error handling Spotify authentication:', error);
         });
     }
   }, [response]);
@@ -53,6 +66,74 @@ const LoginScreen = ({ navigation }) => {
       console.error('Error initiating Spotify authentication:', error.message);
     }
   };
+
+  const carouselItems = [
+    {
+      id: '1',
+      title: 'Welcome to SoundScout!',
+      subText: 'Step into a world where music is more than just sound—it\'s a journey. Explore fresh tracks from your local scene and beyond, handpicked for your unique taste. Whether it\'s indie vibes from a nearby café or the latest club beats, we\'ve got your next favorite song waiting.',
+      image: require('../assets/logo/SoundScout.gif'),
+      imageStyle: {
+        width: 300,
+        height: 200,
+        objectFit: 'contain',
+        resizeMode: 'cover',
+      },
+    },
+    {
+      id: '2',
+      title: 'Discover, Like, Share!',
+      subText: 'Dive into genres you know and uncover sounds you\'ve never imagined. Like what you hear? Show some love by liking tracks and creating a playlist of your new discoveries. Music is just the beginning—connect with fellow listeners and share the vibe.',
+      image: require('../assets/logo/together3.jpg'),
+      imageStyle: {
+        width: 300,
+        height: 200,
+        objectFit: 'contain',
+        borderRadius: 20,
+        resizeMode: 'cover',
+      },
+    },
+    {
+      id: '3',
+      title: 'Let’s Get Started',
+      subText: 'Ready to discover your next favorite track? Let\'s dive in and explore the sounds around you. Join a world of music, connect with others, and make every beat count.',
+      image: require('../assets/logo/together4.jpg'),
+      imageStyle: {
+        width: 300,
+        height: 200,
+        objectFit: 'contain',
+        borderRadius: 20,
+        resizeMode: 'cover',
+      },
+    },
+  ];
+
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const flatListRef = useRef(null);
+
+  const onViewRef = React.useRef(({ viewableItems }) => {
+    if (viewableItems.length > 0) {
+      setCurrentIndex(viewableItems[0].index);
+    }
+  });
+  const viewConfigRef = React.useRef({ viewAreaCoveragePercentThreshold: 50 });
+
+  React.useEffect(() => {
+    const interval = setInterval(() => {
+      const nextIndex = (currentIndex + 1) % carouselItems.length;
+      flatListRef.current.scrollToIndex({ index: nextIndex, animated: true });
+    }, 10000);
+
+    return () => clearInterval(interval);
+  }, [currentIndex]);
+
+  const renderItem = ({ item }) => (
+    <View style={styles.carouselItem}>
+      <Image source={item.image} style={item.imageStyle} />
+      <Text style={styles.title}>{item.title}</Text>
+      <Text style={styles.subText1}>{item.subText}</Text>
+    </View>
+  );
 
   return (
     <View style={styles.screenContainer}>
@@ -82,15 +163,18 @@ const LoginScreen = ({ navigation }) => {
       </View>
 
       <View style={styles.bottomContainer}>
-        <TouchableOpacity
-          style={styles.signUpButton}
-          disabled={!request}
-          onPress={() => {
-            promptAsync();
-          }}
-        >
-          <Text style={styles.buttonText}>Sign Up with Spotify</Text>
+        <TouchableOpacity style={styles.signUpButton}>
+          <Text
+            style={styles.buttonText}
+            disabled={!request}
+            onPress={() => {
+              promptAsync();
+            }}>
+              Sign Up with Spotify
+          </Text>
+          <SpotifyLogo width={24} height={24} />
         </TouchableOpacity>
+
         <Text style={styles.subText}>Already have an account?</Text>
 
         <TouchableOpacity>
@@ -99,7 +183,7 @@ const LoginScreen = ({ navigation }) => {
       </View>
     </View>
   );
-};
+}
 
 const styles = StyleSheet.create({
   screenContainer: {
@@ -152,10 +236,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 40,
     borderRadius: 8,
     marginBottom: 15,
+    flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'center',
   },
   buttonText: {
     color: '#fff',
     fontSize: 16,
+    marginRight: 8,
   },
   subText: {
     color: '#333',
