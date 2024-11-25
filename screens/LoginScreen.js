@@ -2,8 +2,9 @@ import React, { useRef, useState, useEffect } from 'react';
 import { View, Text, Image, StyleSheet, TouchableOpacity, FlatList, Dimensions } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuthRequest, makeRedirectUri } from 'expo-auth-session';
-import { initiateSpotifyAuth, handleAuthCallback, getUserProfile } from '../api/spotify';
-import SpotifyLogo from '../assets/2024-spotify-logo-icon/Primary_Logo_White_CMYK.svg'; 
+import { initiateSpotifyAuth, handleAuthCallback, getUserProfile } from './utils/spotify';
+import { checkExistingAccountByEmail } from './utils/backendUtils';
+import SpotifyLogo from '../assets/2024-spotify-logo-icon/Primary_Logo_White_CMYK.svg';
 
 const { width, height } = Dimensions.get("screen");
 
@@ -15,11 +16,12 @@ export default function LoginScreen({ navigation }) {
 
   const clientId = '6418fb58c7fe4f60bddd2d5a5a970888';
   const redirectUri = makeRedirectUri({ scheme: 'soundscout' });
+  console.log(redirectUri);
 
   const [request, response, promptAsync] = useAuthRequest(
     {
       clientId,
-      scopes: ['user-read-private', 'user-read-email'],
+      scopes: ['user-read-private', 'user-read-email', 'user-read-playback-state'],
       redirectUri,
       usePKCE: true,
     },
@@ -32,23 +34,32 @@ export default function LoginScreen({ navigation }) {
 
       handleAuthCallback(code, request.codeVerifier)
         .then(async (tokenResponse) => {
-          const { access_token } = tokenResponse;
+          const { access_token, refresh_token } = tokenResponse;
 
-          // Save token to storage
+          // Save tokens to storage
           await AsyncStorage.setItem('spotifyAccessToken', access_token);
+          await AsyncStorage.setItem('spotifyRefreshToken', refresh_token);
 
-          // Fetch user profile
+          // Fetch user profile from Spotify
           const userProfile = await getUserProfile(access_token);
 
-          // TODO: Check if the Spotify account is linked to a SoundScout account in Firebase
           console.log('Spotify User Profile:', userProfile);
 
-          const isExistingAccount = false; // Placeholder for backend check
-          if (isExistingAccount) {
-            navigation.navigate('Map', { token: access_token });
-          } else {
-            console.log('No SoundScout account associated with this Spotify account.');
-            // Redirect or handle account creation flow here
+          try {
+            // Check if the user's email exists in Firebase
+            const isExistingAccount = await checkExistingAccountByEmail(userProfile.email); // Updated backend function
+
+            if (isExistingAccount) {
+              // Navigate to the Map screen if the account exists
+              navigation.navigate('Map', { token: access_token });
+            } else {
+              // Redirect to SignUp screen if the account does not exist
+              console.log('No SoundScout account associated with this email.');
+              navigation.navigate('SignUp', { userProfile });
+            }
+          } catch (error) {
+            console.error('Error checking existing account:', error);
+            // Optionally show an error message to the user
           }
         })
         .catch((error) => {
@@ -163,23 +174,24 @@ export default function LoginScreen({ navigation }) {
       </View>
 
       <View style={styles.bottomContainer}>
-        <TouchableOpacity style={styles.signUpButton}>
+        <TouchableOpacity style={styles.signUpButton}
+          disabled={!request}
+          onPress={() => {
+            promptAsync();
+          }}>
           <Text
-            style={styles.buttonText}
-            disabled={!request}
-            onPress={() => {
-              promptAsync();
-            }}>
-              Sign Up with Spotify
+            style={styles.signUpButtonText}>
+            Sign Up with Spotify
           </Text>
           <SpotifyLogo width={24} height={24} />
         </TouchableOpacity>
 
         <Text style={styles.subText}>Already have an account?</Text>
 
-        <TouchableOpacity>
+        <TouchableOpacity onPress={() => navigation.navigate('SignIn')}>
           <Text style={styles.signInText}>Sign In</Text>
         </TouchableOpacity>
+
       </View>
     </View>
   );
@@ -194,7 +206,7 @@ const styles = StyleSheet.create({
   flatListContainer: {
     justifyContent: 'center',
     alignItems: 'center',
-    height: height * 0.6, // Adjust height for proper placement
+    height: height * 0.6,
   },
   carouselItem: {
     width,
@@ -237,11 +249,12 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginBottom: 15,
     flexDirection: 'row',
-  alignItems: 'center',
-  justifyContent: 'center',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  buttonText: {
+  signUpButtonText: {
     color: '#fff',
+    fontWeight: 600,
     fontSize: 16,
     marginRight: 8,
   },
