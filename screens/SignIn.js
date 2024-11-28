@@ -1,154 +1,188 @@
-import React, { useState } from 'react';
-import { View, Text, Image, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { signInWithEmail } from './utils/backendUtils';
+// NO LONGER USING THIS FILE BUT KEEPING HERE JUST IN CASE
 
-export default function SignIn({ navigation }) {
-    const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
-    const [errorMessage, setErrorMessage] = useState('');
+// import React, { useState } from 'react';
+// import {
+//     View,
+//     Text,
+//     Image,
+//     TextInput,
+//     TouchableOpacity,
+//     StyleSheet,
+//     KeyboardAvoidingView,
+//     ScrollView,
+//     Platform,
+// } from 'react-native';
+// import AsyncStorage from '@react-native-async-storage/async-storage';
+// import { signInWithEmailAndPassword } from './utils/backendUtils';
 
-    const handleSignIn = async () => {
-        try {
-            // Validate email and password
-            if (!email || !password) {
-                setErrorMessage('Both email and password are required.');
-                return;
-            }
+// export default function SignIn({ navigation }) {
+//     const [email, setEmail] = useState('');
+//     const [password, setPassword] = useState('');
+//     const [errorMessage, setErrorMessage] = useState('');
 
-            // Authenticate user
-            const { accessToken, refreshToken } = await signInWithEmail(email, password);
+//     const handleSignIn = async () => {
+//         setErrorMessage(""); // Clear previous errors
 
-            // Save tokens to AsyncStorage
-            await AsyncStorage.setItem('spotifyAccessToken', accessToken);
-            await AsyncStorage.setItem('spotifyRefreshToken', refreshToken);
+//         if (!email || !password) {
+//             setErrorMessage("Email and/or password were incorrect. Try again.");
+//             return;
+//         }
 
-            // Navigate to Map screen
-            navigation.navigate('Map', { token: accessToken });
-        } catch (error) {
-            console.error('Error during sign-in:', error);
-            setErrorMessage('Invalid email or password. Please try again.');
-        }
-    };
+//         try {
+//             // Call the backend to sign in the user
+//             const userData = await signInWithEmailAndPassword(email, password);
 
-    return (
-        <View style={styles.container}>
-            {/* Back Button */}
-            <View style={styles.headerContainer}>
-                <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-                    <Text style={styles.backButtonText}>&lt; Back</Text>
-                </TouchableOpacity>
-            </View>
+//             try {
+//                 // Ensure Spotify data (refresh token if needed)
+//                 const spotifyData = await ensureSpotifyDataForReturningUser();
+//                 console.log("Spotify Data:", spotifyData);
 
-            <View style={styles.contentContainer}>
-                {/* App Logo */}
-                <Image
-                    source={require('../assets/logo/SoundScout.gif')}
-                    style={styles.logo}
-                />
+//                 // Save user ID to AsyncStorage
+//                 await AsyncStorage.setItem("spotifyUserId", userData.id);
 
-                <Text style={styles.header}>Sign In</Text>
+//                 // Navigate to the home page with Spotify data
+//                 navigation.navigate("Map", { spotifyData });
+//             } catch (spotifyError) {
+//                 console.warn("Spotify Error:", spotifyError.message);
 
-                {/* Email Input */}
-                <Text style={styles.label}>Email</Text>
-                <TextInput
-                    style={styles.input}
-                    value={email}
-                    onChangeText={setEmail}
-                    placeholder="Enter your email"
-                    keyboardType="email-address"
-                    autoCapitalize="none"
-                />
+//                 // If reauthorization is required, show a message
+//                 setErrorMessage("Spotify authorization is required. Please sign in again.");
+//             }
+//         } catch (error) {
+//             console.error("Sign-In Error:", error.message);
+//             setErrorMessage("Something went wrong. Please try again.");
+//         }
+//     };
 
-                {/* Password Input */}
-                <Text style={styles.label}>Password</Text>
-                <TextInput
-                    style={styles.input}
-                    value={password}
-                    onChangeText={setPassword}
-                    placeholder="Enter your password"
-                    secureTextEntry
-                />
+//     return (
+//         <KeyboardAvoidingView
+//             style={{ flex: 1 }}
+//             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+//         >
+//             <ScrollView contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled">
+//                 <View style={styles.container}>
+//                     {/* Back Button */}
+//                     <View style={styles.headerContainer}>
+//                         <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+//                             <Text style={styles.backButtonText}>&lt; Back</Text>
+//                         </TouchableOpacity>
+//                     </View>
 
-                {/* Error Message */}
-                {errorMessage ? <Text style={styles.error}>{errorMessage}</Text> : null}
+//                     <View style={styles.contentContainer}>
+//                         {/* App Logo */}
+//                         <Image
+//                             source={require('../assets/logo/SoundScout.gif')}
+//                             style={styles.logo}
+//                         />
 
-                {/* Submit Button */}
-                <TouchableOpacity style={styles.submitButton} onPress={handleSignIn}>
-                    <Text style={styles.submitButtonText}>Sign In</Text>
-                </TouchableOpacity>
-            </View>
-        </View>
-    );
-}
+//                         <Text style={styles.header}>Sign In</Text>
 
-const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: '#F8EEDF',
-    },
-    headerContainer: {
-        flexDirection: 'row',
-        alignItems: 'flex-start',
-        justifyContent: 'flex-start',
-        padding: 10,
-    },
-    backButton: {
-        paddingTop: 40,
-        paddingHorizontal: 10,
-    },
-    backButtonText: {
-        color: '#CA5038',
-        fontWeight: 'bold',
-        fontSize: 16,
-    },
-    contentContainer: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-        paddingHorizontal: 20,
-    },
-    header: {
-        fontSize: 24,
-        fontWeight: 'bold',
-        marginBottom: 15,
-        alignSelf: 'flex-start',
-    },
-    logo: {
-        height: 200,
-        marginBottom: 20,
-        resizeMode: 'contain',
-    },
-    label: {
-        fontSize: 16,
-        fontWeight: 'bold',
-        marginBottom: 8,
-        alignSelf: 'flex-start',
-    },
-    input: {
-        borderWidth: 1,
-        borderColor: '#ccc',
-        borderRadius: 5,
-        padding: 10,
-        width: '100%',
-        marginBottom: 20,
-    },
-    error: {
-        color: 'red',
-        marginBottom: 20,
-        textAlign: 'center',
-    },
-    submitButton: {
-        backgroundColor: '#28A745',
-        padding: 15,
-        borderRadius: 5,
-        alignItems: 'center',
-        marginBottom: 15,
-        width: '100%',
-    },
-    submitButtonText: {
-        color: '#fff',
-        fontWeight: 'bold',
-        fontSize: 16,
-    },
-});
+//                         {/* Email Input */}
+//                         <Text style={styles.label}>Email</Text>
+//                         <TextInput
+//                             style={styles.input}
+//                             value={email}
+//                             onChangeText={setEmail}
+//                             placeholder="Enter your email"
+//                             keyboardType="email-address"
+//                             autoCapitalize="none"
+//                         />
+
+//                         {/* Password Input */}
+//                         <Text style={styles.label}>Password</Text>
+//                         <TextInput
+//                             style={styles.input}
+//                             value={password}
+//                             onChangeText={setPassword}
+//                             placeholder="Enter your password"
+//                             secureTextEntry
+//                         />
+
+//                         {/* Error Message */}
+//                         {errorMessage ? <Text style={styles.error}>{errorMessage}</Text> : null}
+
+//                         {/* Submit Button */}
+//                         <TouchableOpacity style={styles.submitButton} onPress={handleSignIn}>
+//                             <Text style={styles.submitButtonText}>Sign In</Text>
+//                         </TouchableOpacity>
+//                     </View>
+//                 </View>
+//             </ScrollView>
+//         </KeyboardAvoidingView>
+//     );
+// }
+
+// const styles = StyleSheet.create({
+//     scrollContainer: {
+//         flexGrow: 1,
+//     },
+//     container: {
+//         flex: 1,
+//         backgroundColor: '#F8EEDF',
+//         paddingHorizontal: 20,
+//     },
+//     headerContainer: {
+//         flexDirection: 'row',
+//         alignItems: 'flex-start',
+//         justifyContent: 'flex-start',
+//         paddingVertical: 10,
+//     },
+//     backButton: {
+//         paddingTop: 40,
+//         paddingHorizontal: 10,
+//     },
+//     backButtonText: {
+//         color: '#CA5038',
+//         fontWeight: 'bold',
+//         fontSize: 24,
+//     },
+//     contentContainer: {
+//         flex: 1,
+//         justifyContent: 'center',
+//         alignItems: 'center',
+//         paddingHorizontal: 20,
+//     },
+//     header: {
+//         fontSize: 24,
+//         fontWeight: 'bold',
+//         marginBottom: 15,
+//         alignSelf: 'flex-start',
+//     },
+//     logo: {
+//         height: 200,
+//         marginBottom: 20,
+//         resizeMode: 'contain',
+//     },
+//     label: {
+//         fontSize: 16,
+//         fontWeight: 'bold',
+//         marginBottom: 8,
+//         alignSelf: 'flex-start',
+//     },
+//     input: {
+//         borderWidth: 1,
+//         borderColor: '#ccc',
+//         borderRadius: 5,
+//         padding: 10,
+//         width: '100%',
+//         marginBottom: 20,
+//     },
+//     error: {
+//         color: 'red',
+//         marginBottom: 20,
+//         textAlign: 'center',
+//     },
+//     submitButton: {
+//         backgroundColor: '#28A745',
+//         padding: 15,
+//         borderRadius: 5,
+//         alignItems: 'center',
+//         marginBottom: 15,
+//         width: '100%',
+//     },
+//     submitButtonText: {
+//         color: '#fff',
+//         fontWeight: 'bold',
+//         fontSize: 16,
+//     },
+// });

@@ -1,24 +1,29 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Switch, TextInput, Modal, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Switch, TextInput, Modal, Image, Alert, ActivityIndicator } from 'react-native';
 import GridIcon from '../assets/logo/grid.svg';
 import GhostIcon from '../assets/logo/ghost.svg';
 import ProfileIcon from '../assets/logo/profile.svg';
 import SignOutIcon from '../assets/logo/signOut.svg';
 import DeleteAccountIcon from '../assets/logo/deleteAccount.svg';
-import signOut from './utils/signOut';
-import { fetchUserProfile, deleteAccount, updateDisplayName, updateProfilePicture, updatePassword } from './utils/backendUtils';
+import {
+    fetchUserProfile,
+    signOut,
+    deleteAccount,
+    validatePassword,
+    updateDisplayName,
+    updateProfilePicture,
+    updatePassword,
+    isGhostMode,
+    toggleGhostMode
+} from './utils/backendUtils';
 import * as ImagePicker from 'expo-image-picker';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function Settings({ navigation }) {
     const [isMapView, setIsMapView] = useState(true);
     const toggleView = () => setIsMapView(!isMapView);
-
-    const [isGhostMode, setIsGhostMode] = useState(false);
-    const toggleGhostMode = () => setIsGhostMode(!isGhostMode);
-
     const [showDeletePopup, setShowDeletePopup] = useState(false);
     const [password, setPassword] = useState('');
-
     const [showEditProfilePopup, setShowEditProfilePopup] = useState(false);
     const [displayName, setDisplayName] = useState('');
     const [profilePic, setProfilePic] = useState('');
@@ -30,6 +35,9 @@ export default function Settings({ navigation }) {
     const [tempProfilePic, setTempProfilePic] = useState('');
     const [tempNewPassword, setTempNewPassword] = useState('');
     const [tempConfirmPassword, setTempConfirmPassword] = useState('');
+    const [ghostModeEnabled, setGhostModeEnabled] = useState(false);
+    const [isGridViewEnabled, setIsGridViewEnabled] = useState(false);
+    const [isLoading, setIsLoading] = useState(false);
 
     const resetTempFields = () => {
         setTempDisplayName(displayName);
@@ -44,22 +52,48 @@ export default function Settings({ navigation }) {
         }
     }, [showEditProfilePopup]);
 
-    const handleLogout = () => {
-        // Add logout functionality here
-        console.log('User logged out');
-        navigation.navigate('Login'); // Navigate to Login screen after logout
-    };
+    useEffect(() => {
+        const fetchInitialGhostModeState = async () => {
+            try {
+                const ghostModeState = await isGhostMode();
+                setGhostModeEnabled(ghostModeState);
+            } catch (error) {
+                console.error('Error fetching initial Ghost Mode state:', error.message);
+            }
+        };
+
+        fetchInitialGhostModeState();
+    }, []);
 
     const handleDeleteAccount = async () => {
         try {
-            // Replace with the actual userId
-            const userId = '12345';
-            await deleteAccount(userId, password);
+            setErrorMessage("");
+            setIsLoading(true);
+
+            const userId = await AsyncStorage.getItem('spotifyUserId');
+            if (!userId) throw new Error('User ID not found in storage.');
+
+            if (!password) {
+                setErrorMessage("Please enter your password to confirm.");
+                return;
+            }
+
+            const isValid = await validatePassword(userId, password);
+            if (!isValid) {
+                setErrorMessage("Incorrect password. Please try again.");
+                return;
+            }
+
+            await deleteAccount(userId);
+            await AsyncStorage.clear();
             setShowDeletePopup(false);
-            navigation.navigate('Login'); // Navigate to Login screen after deletion
+
+            navigation.navigate('Login');
         } catch (error) {
-            console.error('Error deleting account:', error);
-            alert('Failed to delete account. Please try again.');
+            console.error('Error deleting account:', error.message);
+            setErrorMessage('Failed to delete account. Please try again.');
+        } finally {
+            setIsLoading(false);
         }
     };
 
@@ -86,8 +120,121 @@ export default function Settings({ navigation }) {
         }
     };
 
+    const handleToggleGhostMode = async () => {
+        try {
+            const newGhostModeState = !ghostModeEnabled;
+            console.log('Ghost Mode toggled in Settings:', newGhostModeState);
+
+            const success = await toggleGhostMode(newGhostModeState);
+            if (!success) {
+                Alert.alert('Error', 'Failed to update Ghost Mode setting in Firebase. Please try again.');
+                return;
+            }
+
+            setGhostModeEnabled(newGhostModeState);
+
+            Alert.alert(
+                newGhostModeState ? 'Ghost Mode Enabled' : 'Ghost Mode Disabled',
+                newGhostModeState
+                    ? 'Your location is now hidden from others.'
+                    : 'Your location is now visible to others.'
+            );
+        } catch (error) {
+            console.error('Error toggling Ghost Mode:', error.message);
+            Alert.alert('Error', 'Failed to toggle Ghost Mode. Please try again.');
+        }
+    };
+
+    const handleToggleGridView = async () => {
+        const success = await toggleGridView(!isGridViewEnabled);
+        if (success) {
+            setIsGridViewEnabled(!isGridViewEnabled);
+        } else {
+            Alert.alert('Error', 'Failed to update Grid View setting. Please try again.');
+        }
+    };
+
+    const saveProfileChanges = async () => {
+        try {
+            setIsLoading(true);
+            if (tempNewPassword && tempConfirmPassword !== tempNewPassword) {
+                setErrorMessage('Passwords do not match.');
+                return;
+            }
+
+            if (tempDisplayName !== displayName) {
+                await updateDisplayName(tempDisplayName);
+                setDisplayName(tempDisplayName);
+            }
+            if (tempProfilePic !== profilePic) {
+                await updateProfilePicture(tempProfilePic);
+                setProfilePic(tempProfilePic);
+            }
+            if (tempNewPassword) {
+                await updatePassword(tempNewPassword);
+            }
+
+            setSuccessMessage('All changes saved.');
+            setTimeout(() => setShowEditProfilePopup(false), 2000);
+        } catch (error) {
+            console.error('Error updating profile:', error);
+            setErrorMessage('Failed to update profile.');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleSignOut = async () => {
+        try {
+            await signOut();
+            navigation.navigate("Login");
+        } catch (error) {
+            console.error("Error during sign out:", error.message);
+        }
+    };
+
+    const syncGhostModeState = async () => {
+        try {
+            const isGhostMode = await AsyncStorage.getItem('userData');
+            const userData = isGhostMode ? JSON.parse(isGhostMode) : {};
+            if (userData.isGhostMode !== undefined) {
+                await toggleGhostMode(userData.isGhostMode);
+            }
+        } catch (error) {
+            console.error('Error syncing Ghost Mode state:', error.message);
+        }
+    };
+
+    useEffect(() => {
+        syncGhostModeState();
+    }, []);
+
+    useEffect(() => {
+        const fetchUserInfo = async () => {
+            try {
+                setIsLoading(true);
+                const userId = await AsyncStorage.getItem('spotifyUserId');
+                const userProfile = await fetchUserProfile(userId);
+                setDisplayName(userProfile.username || 'Guest');
+                setProfilePic(userProfile.profilePic || '');
+            } catch (error) {
+                console.error('Error fetching user info:', error.message);
+                Alert.alert('Error', 'Failed to load user information.');
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        fetchUserInfo();
+    }, []);
+
     return (
         <View style={styles.container}>
+            <Modal visible={isLoading} transparent={true} animationType="fade">
+                <View style={styles.loadingOverlay}>
+                    <ActivityIndicator size="large" color="#CA5038" />
+                </View>
+            </Modal>
             <View style={styles.backButtonContainer}>
                 <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
                     <Text style={styles.backButtonText}>&lt; Back</Text>
@@ -95,6 +242,23 @@ export default function Settings({ navigation }) {
             </View>
             <View style={styles.headerContainer}>
                 <Text style={styles.header}>Settings</Text>
+            </View>
+            <View style={styles.signedInAsContainer}>
+                {isLoading ? (
+                    <ActivityIndicator size="small" color="#F8EEDF" />
+                ) : (
+                    <>
+                        {profilePic ? (
+                            <Image source={{ uri: profilePic }} style={styles.signedInProfilePic} />
+                        ) : (
+                            <ProfileIcon width={50} height={50} />
+                        )}
+                        <View style={styles.signedInTextContainer}>
+                            <Text style={styles.signedInLabel}>Signed in as:</Text>
+                            <Text style={styles.signedInUsername}>{displayName || 'Guest'}</Text>
+                        </View>
+                    </>
+                )}
             </View>
             <View style={styles.settingsOptions}>
                 <View style={styles.toggleContainer}>
@@ -106,10 +270,10 @@ export default function Settings({ navigation }) {
                         </View>
                     </View>
                     <Switch
-                        value={isGhostMode}
-                        onValueChange={toggleGhostMode}
+                        value={ghostModeEnabled}
+                        onValueChange={handleToggleGhostMode}
                         trackColor={{ false: '#767577', true: '#EAC255' }}
-                        thumbColor={isGhostMode ? '#93CE89' : '#EAC255'}
+                        thumbColor={ghostModeEnabled ? '#93CE89' : '#EAC255'}
                     />
                 </View>
                 <View style={styles.toggleContainer}>
@@ -139,7 +303,7 @@ export default function Settings({ navigation }) {
                     <Text style={styles.settingsOptionText}>Edit Profile</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.cardBase}>
+                <TouchableOpacity style={styles.cardBase} onPress={handleSignOut}>
                     <SignOutIcon width={30} height={30} />
                     <Text style={styles.settingsOptionText}>Sign Out</Text>
                 </TouchableOpacity>
@@ -160,16 +324,19 @@ export default function Settings({ navigation }) {
                     <View style={styles.deleteModalContent}>
                         <Text style={styles.modalTitle}>Confirm Account Deletion</Text>
                         <Text style={styles.modalDescription}>
-                            Are you sure you want to delete your account? This action cannot be
-                            undone.
+                            Are you sure you want to delete your account? This action cannot be undone.
                         </Text>
                         <TextInput
                             style={styles.input}
                             placeholder="Enter your password"
                             secureTextEntry
                             value={password}
-                            onChangeText={setPassword}
+                            onChangeText={(text) => {
+                                setPassword(text);
+                            }}
                         />
+                        {/* Display error message */}
+                        {errorMessage ? <Text style={styles.errorMessage}>{errorMessage}</Text> : null}
                         <View style={styles.modalButtons}>
                             <TouchableOpacity
                                 style={styles.cancelButton}
@@ -291,7 +458,7 @@ export default function Settings({ navigation }) {
                                             await updatePassword('12345', tempNewPassword);
                                         }
                                         setSuccessMessage('All changes saved successfully.');
-                                        setTimeout(() => setShowEditProfilePopup(false), 2000); // Close modal after success
+                                        setTimeout(() => setShowEditProfilePopup(false), 2000);
                                     } catch (error) {
                                         console.error('Error updating profile:', error);
                                         setErrorMessage('Failed to update profile. Please try again.');
@@ -326,7 +493,7 @@ const styles = StyleSheet.create({
     backButtonText: {
         color: '#CA5038',
         fontWeight: 'bold',
-        fontSize: 16,
+        fontSize: 24,
     },
     headerContainer: {
         backgroundColor: '#CA5038',
@@ -341,6 +508,35 @@ const styles = StyleSheet.create({
         color: '#F8EEDF',
         fontSize: 24,
         fontWeight: 'bold',
+    },
+    signedInAsContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'flex-start',
+        backgroundColor: '#CA5038',
+        padding: 15,
+        borderRadius: 12,
+        marginHorizontal: 30,
+        marginBottom: 20,
+    },
+    signedInProfilePic: {
+        width: 50,
+        height: 50,
+        borderRadius: 25,
+        marginRight: 15,
+    },
+    signedInTextContainer: {
+        flexDirection: 'column',
+    },
+    signedInLabel: {
+        color: '#F8EEDF',
+        fontSize: 14,
+        fontWeight: '600',
+    },
+    signedInUsername: {
+        color: '#93CE89',
+        fontSize: 18,
+        fontWeight: '700',
     },
     settingsOptions: {
         paddingHorizontal: 30,
@@ -426,7 +622,7 @@ const styles = StyleSheet.create({
         borderRadius: 5,
         padding: 10,
         marginBottom: 20,
-        color: '#000',
+        color: '#F8EEDF',
     },
     modalButtons: {
         flexDirection: 'row',
@@ -501,5 +697,11 @@ const styles = StyleSheet.create({
     },
     profilePicPlaceholderText: {
         color: '#fff',
+    },
+    loadingOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        justifyContent: 'center',
+        alignItems: 'center',
     },
 });

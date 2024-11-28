@@ -1,12 +1,10 @@
-import React, { useRef, useState, useEffect } from 'react';
-import { View, Text, Image, StyleSheet, TouchableOpacity, FlatList, Dimensions } from 'react-native';
+import React, { useRef, useState, useEffect, route } from 'react';
+import { View, Text, Image, StyleSheet, TouchableOpacity, FlatList, Dimensions, Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuthRequest, makeRedirectUri } from 'expo-auth-session';
-import { initiateSpotifyAuth, handleAuthCallback, getUserProfile } from './utils/spotify';
-import { checkExistingAccountByEmail } from './utils/backendUtils';
+import { handleAuthCallback, getUserProfile } from './utils/spotify';
+import { checkExistingAccountBySpotifyId, fetchUserProfile } from './utils/backendUtils';
 import SpotifyLogo from '../assets/2024-spotify-logo-icon/Primary_Logo_White_CMYK.svg';
-
-const { width, height } = Dimensions.get("screen");
 
 export default function LoginScreen({ navigation }) {
   const discovery = {
@@ -21,62 +19,57 @@ export default function LoginScreen({ navigation }) {
   const [request, response, promptAsync] = useAuthRequest(
     {
       clientId,
-      scopes: ['user-read-private', 'user-read-email', 'user-read-playback-state'],
+      scopes: [
+        'user-read-private',
+        'user-read-email',
+        'user-read-playback-state',
+        'playlist-modify-public',
+        'playlist-modify-private',
+      ],
       redirectUri,
       usePKCE: true,
     },
     discovery
   );
 
-  useEffect(() => {
-    if (response?.type === 'success' && response.params.code) {
-      const { code } = response.params;
+  console.log('Generated codeVerifier:', request?.codeVerifier);
 
-      handleAuthCallback(code, request.codeVerifier)
-        .then(async (tokenResponse) => {
+
+  useEffect(() => {
+    const handleResponse = async () => {
+      if (response?.type === 'success' && response.params.code) {
+        const { code } = response.params;
+
+        try {
+          const tokenResponse = await handleAuthCallback(code, request.codeVerifier);
           const { access_token, refresh_token } = tokenResponse;
 
-          // Save tokens to storage
           await AsyncStorage.setItem('spotifyAccessToken', access_token);
           await AsyncStorage.setItem('spotifyRefreshToken', refresh_token);
 
-          // Fetch user profile from Spotify
           const userProfile = await getUserProfile(access_token);
 
-          console.log('Spotify User Profile:', userProfile);
+          await AsyncStorage.setItem('spotifyUserId', userProfile.id);
 
-          try {
-            // Check if the user's email exists in Firebase
-            const isExistingAccount = await checkExistingAccountByEmail(userProfile.email); // Updated backend function
+          const isExistingAccount = await checkExistingAccountBySpotifyId(userProfile.id);
 
-            if (isExistingAccount) {
-              // Navigate to the Map screen if the account exists
-              navigation.navigate('Map', { token: access_token });
-            } else {
-              // Redirect to SignUp screen if the account does not exist
-              console.log('No SoundScout account associated with this email.');
-              navigation.navigate('SignUp', { userProfile });
-            }
-          } catch (error) {
-            console.error('Error checking existing account:', error);
-            // Optionally show an error message to the user
+          if (isExistingAccount) {
+            const userData = await fetchUserProfile(userProfile.id);
+            await AsyncStorage.setItem('userData', JSON.stringify(userData));
+
+            navigation.navigate('Map');
+          } else {
+            navigation.navigate('SignUp', { userProfile });
           }
-        })
-        .catch((error) => {
-          console.error('Error handling Spotify authentication:', error);
-        });
-    }
-  }, [response]);
+        } catch (error) {
+          console.error('Error during Spotify authentication:', error.message);
+          Alert.alert('Error', 'An error occurred during authentication. Please try again.');
+        }
+      }
+    };
 
-  const handleSpotifySignUp = async () => {
-    try {
-      const { url, codeVerifier } = await initiateSpotifyAuth();
-      console.log('Auth URL:', url);
-      promptAsync({ url });
-    } catch (error) {
-      console.error('Error initiating Spotify authentication:', error.message);
-    }
-  };
+    handleResponse();
+  }, [response]);
 
   const carouselItems = [
     {
@@ -174,24 +167,16 @@ export default function LoginScreen({ navigation }) {
       </View>
 
       <View style={styles.bottomContainer}>
-        <TouchableOpacity style={styles.signUpButton}
+        <TouchableOpacity
+          style={styles.signUpButton}
           disabled={!request}
           onPress={() => {
             promptAsync();
-          }}>
-          <Text
-            style={styles.signUpButtonText}>
-            Sign Up with Spotify
-          </Text>
+          }}
+        >
+          <Text style={styles.signUpButtonText}>Sign up/in with Spotify</Text>
           <SpotifyLogo width={24} height={24} />
         </TouchableOpacity>
-
-        <Text style={styles.subText}>Already have an account?</Text>
-
-        <TouchableOpacity onPress={() => navigation.navigate('SignIn')}>
-          <Text style={styles.signInText}>Sign In</Text>
-        </TouchableOpacity>
-
       </View>
     </View>
   );
@@ -201,48 +186,54 @@ const styles = StyleSheet.create({
   screenContainer: {
     flex: 1,
     backgroundColor: '#93CE89',
-    justifyContent: 'center',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 20,
   },
   flatListContainer: {
     justifyContent: 'center',
     alignItems: 'center',
-    height: height * 0.6,
+    paddingBottom: 20,
   },
   carouselItem: {
-    width,
+    width: Dimensions.get('window').width * 0.8,
+    justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 20,
+    marginHorizontal: Dimensions.get('window').width * 0.1,
   },
   title: {
-    marginTop: 15,
-    fontSize: 24,
+    marginTop: 25,
+    fontSize: 26,
     fontWeight: 'bold',
     color: '#333',
     textAlign: 'center',
+    lineHeight: 30,
   },
   subText1: {
-    marginTop: 10,
-    fontSize: 16,
-    width: width * 0.8,
+    marginVertical: 10,
+    fontSize: 20,
     color: '#555',
     textAlign: 'center',
+    lineHeight: 24,
+    paddingHorizontal: 10,
   },
   dotsContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
-    marginVertical: 15,
+    marginVertical: 20,
   },
   dot: {
-    height: 10,
-    width: 10,
-    borderRadius: 5,
-    marginHorizontal: 5,
+    height: 12,
+    width: 12,
+    borderRadius: 6,
+    marginHorizontal: 6,
   },
   bottomContainer: {
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 45,
   },
   signUpButton: {
+    width: '80%',
     backgroundColor: '#CA5038',
     paddingVertical: 12,
     paddingHorizontal: 40,
@@ -253,18 +244,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   signUpButtonText: {
-    color: '#fff',
+    color: '#F8EEDF',
     fontWeight: 600,
-    fontSize: 16,
+    fontSize: 24,
     marginRight: 8,
-  },
-  subText: {
-    color: '#333',
-    fontSize: 14,
-    marginBottom: 10,
-  },
-  signInText: {
-    color: '#CA5038',
-    fontSize: 14,
   },
 });

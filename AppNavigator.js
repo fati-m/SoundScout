@@ -4,10 +4,11 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import LoginScreen from './screens/LoginScreen';
 import EntryPage from './screens/EntryScreen';
 import Map from './screens/HomePageMap';
-import signOut from './screens/utils/signOut';
 import SignUp from './screens/SignUp';
-import SignIn from './screens/SignIn';
 import Settings from './screens/Settings';
+import Likes from './screens/Likes';
+import AddToPlaylist from './screens/AddToPlaylist';
+import Recommendations from './screens/Recommendations';
 
 const Stack = createStackNavigator();
 
@@ -15,32 +16,28 @@ export default function AppNavigator() {
   const [initialRoute, setInitialRoute] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  const shouldSignOutOnReload = false;
-
   useEffect(() => {
-    const initializeApp = async () => {
+    const determineInitialRoute = async () => {
       try {
-        if (shouldSignOutOnReload) {
-          console.log('Signing out on app reload...');
-          await signOut();
+        const userId = await AsyncStorage.getItem('spotifyUserId');
+        if (userId) {
+          setInitialRoute('Map');
+        } else {
+          setInitialRoute('Entry');
         }
-
-        // Check for a valid token after potential sign-out
-        const token = await AsyncStorage.getItem('spotifyAccessToken');
-        setInitialRoute(token ? 'Map' : 'Login');
       } catch (error) {
-        console.error('Error initializing app:', error);
-        setInitialRoute('Login');
+        console.error('Error determining initial route:', error);
+        setInitialRoute('Entry');
       } finally {
         setIsLoading(false);
       }
     };
 
-    initializeApp();
+    determineInitialRoute();
   }, []);
 
   if (isLoading || initialRoute === null) {
-    return null; // Optionally show a loading indicator
+    return null;
   }
 
   return (
@@ -64,20 +61,32 @@ export default function AppNavigator() {
       />
 
       <Stack.Screen
-        name="SignUp" // Add the SignUp screen here
+        name="SignUp"
         component={SignUp}
-        options={{ headerShown: false }}
-      />
-
-      <Stack.Screen
-        name="SignIn"
-        component={SignIn}
         options={{ headerShown: false }}
       />
 
       <Stack.Screen
         name="Settings"
         component={Settings}
+        options={{ headerShown: false }}
+      />
+
+      <Stack.Screen
+        name="Likes"
+        component={Likes}
+        options={{ headerShown: false }}
+      />
+
+      <Stack.Screen
+        name="AddToPlaylist"
+        component={AddToPlaylist}
+        options={{ headerShown: false }}
+      />
+
+      <Stack.Screen
+        name="Recommendations"
+        component={Recommendations}
         options={{ headerShown: false }}
       />
 

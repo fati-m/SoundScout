@@ -1,121 +1,263 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import MapView, { Marker, Callout, PROVIDER_GOOGLE } from 'react-native-maps';
-import { StyleSheet, View, Image, Text, TouchableOpacity } from 'react-native';
+import MapView, { Marker } from 'react-native-maps';
+import { StyleSheet, View, Image, Text, TouchableOpacity, Alert, Animated, Modal, ActivityIndicator } from 'react-native';
 import ProfileIcon from '../assets/logo/profile.svg';
 import HeartIcon from '../assets/logo/heart.svg';
+import OutlineHeartIcon from '../assets/logo/heartOutline.svg';
 import PlusIcon from '../assets/logo/plus.svg';
 import CloseIcon from '../assets/logo/close.svg';
 import MenuIcon from '../assets/logo/menu.svg';
 import SettingsIcon from '../assets/logo/settings.svg';
 import RecommendIcon from '../assets/logo/recommend.svg';
-import { getUserProfile, getCurrentlyPlaying, refreshAccessToken } from './utils/spotify';
+import RecenterIcon from '../assets/logo/recenter.svg';
+import {
+    fetchUserProfile,
+    syncUserDataPeriodically,
+    isGhostMode,
+    isSongLiked,
+    addSongToLikes,
+    removeSongFromLikes,
+} from './utils/backendUtils';
+import * as Location from 'expo-location';
 
 
-export default function Map({ navigation }) {
-    const INITIAL_REGION = {
-        latitude: 43.074921,
-        longitude: -89.403938,
-        latitudeDelta: 0.5,
-        longitudeDelta: 0.5,
-    };
-
-    const [userData, setUserData] = useState({
-        profile: {
-            displayName: 'Loading...',
-            profilePic: null,
-        },
-        currentlyPlaying: {
-            trackName: 'No track playing',
-            artistName: '',
-            albumCover: null,
-        },
-    });
-
-    const [isOverlayVisible, setIsOverlayVisible] = useState(false);
+export default function Map({ navigation, route }) {
+    const mapRef = useRef(null);
+    const [isLoading, setIsLoading] = useState(true);
+    const [currentRegion, setCurrentRegion] = useState(null);
+    const [isGhostModeEnabled, setIsGhostModeEnabled] = useState(false);
+    // const [isGridViewEnabled, setIsGridViewEnabled] = useState(false);
     const [isMenuVisible, setIsMenuVisible] = useState(false);
+    const [isOverlayVisible, setIsOverlayVisible] = useState(false);
+    const [isLiked, setIsLiked] = useState(false);
+    const [userData, setUserData] = useState({
+        username: 'Loading...',
+        profilePic: null,
+        currentlyPlaying: { trackName: 'No track playing', artistName: '', albumCover: '', uri: '' },
+        isGhostMode: false,
+        location: { latitude: 0, longitude: 0 },
+    });
+    const fadeAnim = useRef(new Animated.Value(1)).current;
+    const [successMessage, setSuccessMessage] = useState(route.params?.successMessage || '');
 
-    const handleMarkerPress = () => {
-        setIsOverlayVisible(true); // Show overlay immediately
-        fetchUserData(); // Fetch data without blocking
+    useEffect(() => {
+        const initializeMap = async () => {
+            try {
+                const ghostMode = await isGhostMode();
+                console.log("Initial Ghost Mode state:", ghostMode);
+                setIsGhostModeEnabled(ghostMode);
+
+                const userId = await AsyncStorage.getItem('spotifyUserId');
+                const userProfile = await fetchUserProfile(userId);
+                setUserData(userProfile);
+
+                await startTrackingLocation();
+                startPeriodicSync(userId);
+
+                setIsLoading(false);
+            } catch (error) {
+                console.error('Error initializing map:', error.message);
+                Alert.alert('Error', 'Failed to initialize map data.');
+            }
+        };
+
+        initializeMap();
+
+        return () => clearInterval(syncInterval);
+    }, []);
+
+    let syncInterval;
+    const startPeriodicSync = (userId) => {
+        syncInterval = setInterval(async () => {
+            try {
+                await syncUserDataPeriodically(userId);
+            } catch (error) {
+                console.error('Error syncing user data periodically:', error.message);
+            }
+        }, 30000);
     };
 
-    const fetchUserData = async () => {
+    // Location Tracking
+    const startTrackingLocation = async () => {
         try {
-            let accessToken = await AsyncStorage.getItem('spotifyAccessToken');
-
-            // Fetch user profile data
-            let profile = await getUserProfile(accessToken);
-
-            // If token expired, refresh and retry profile fetch
-            if (!profile) {
-                console.log('Access token expired, refreshing...');
-                accessToken = await refreshAccessToken();
-                profile = await getUserProfile(accessToken);
+            const { status } = await Location.requestForegroundPermissionsAsync();
+            if (status !== 'granted') {
+                Alert.alert('Location Permission Denied', 'Please enable location services.');
+                return;
             }
 
-            // Fetch currently playing track
-            const currentlyPlayingResponse = await getCurrentlyPlaying(accessToken);
-
-            // Handle cases where currentlyPlayingResponse is null
-            const currentlyPlaying = currentlyPlayingResponse || {};
-
-            setUserData({
-                profile: {
-                    displayName: profile?.display_name || 'Unknown User',
-                    profilePic: profile?.images?.[0]?.url || null,
+            await Location.watchPositionAsync(
+                {
+                    accuracy: Location.Accuracy.High,
+                    timeInterval: 5000,
+                    distanceInterval: 10,
                 },
-                currentlyPlaying: {
-                    trackName: currentlyPlaying.trackName || 'No track playing',
-                    artistName: currentlyPlaying.artistName || '',
-                    albumCover: currentlyPlaying.albumCover || null,
-                },
-            });
+                (location) => {
+                    if (!isGhostModeEnabled) {
+                        setCurrentRegion({
+                            latitude: location.coords.latitude,
+                            longitude: location.coords.longitude,
+                            latitudeDelta: 0.01,
+                            longitudeDelta: 0.01,
+                        });
+                    }
+                }
+            );
         } catch (error) {
-            console.error('Error fetching user data:', error);
+            console.error('Error starting location tracking:', error.message);
         }
     };
 
     useEffect(() => {
-        // Fetch user data on component mount
-        fetchUserData();
+        const syncGhostModeState = async () => {
+            try {
+                const userDataString = await AsyncStorage.getItem('userData');
+                const userData = userDataString ? JSON.parse(userDataString) : {};
+                setIsGhostModeEnabled(userData.isGhostMode || false);
+                console.log("Ghost Mode state updated:", userData.isGhostMode);
+            } catch (error) {
+                console.error("Error syncing Ghost Mode state:", error.message);
+            }
+        };
 
-        // Optional: Poll every 30 seconds for currently playing track
-        const interval = setInterval(() => {
-            fetchUserData();
-        }, 30000);
-
-        return () => clearInterval(interval); // Cleanup interval on unmount
+        const interval = setInterval(syncGhostModeState, 1000);
+        return () => clearInterval(interval);
     }, []);
+
+    const handleLikeButtonPress = async () => {
+        try {
+            const userId = await AsyncStorage.getItem('spotifyUserId');
+            const song = userData.currentlyPlaying;
+
+            if (!song?.uri) {
+                Alert.alert('Error', 'No song is currently playing.');
+                return;
+            }
+
+            if (isLiked) {
+                const success = await removeSongFromLikes(userId, song.uri);
+                if (success) setIsLiked(false);
+            } else {
+                const success = await addSongToLikes(userId, song);
+                if (success) setIsLiked(true);
+            }
+        } catch (error) {
+            console.error('Error handling like button:', error.message);
+            Alert.alert('Error', 'Failed to update like status.');
+        }
+    };
+
+    useEffect(() => {
+        const checkIfLiked = async () => {
+            const userId = await AsyncStorage.getItem('spotifyUserId');
+            const liked = await isSongLiked(userId, userData.currentlyPlaying.uri);
+            setIsLiked(liked);
+        };
+
+        if (userData.currentlyPlaying?.uri) checkIfLiked();
+    }, [userData.currentlyPlaying?.uri]);
+
+    useEffect(() => {
+        if (successMessage) {
+            fadeAnim.setValue(1);
+
+            Animated.timing(fadeAnim, {
+                toValue: 0,
+                duration: 8000,
+                useNativeDriver: true,
+            }).start(() => {
+                setSuccessMessage('');
+            });
+        }
+    }, [successMessage]);
 
     return (
         <View style={styles.container}>
-            <MapView
-                style={styles.map}
-                initialRegion={INITIAL_REGION}
-                minZoomLevel={15} //deprecated, but this is what forces the zoom in
-            >
-                {/* Custom Marker */}
-                <Marker
-                    coordinate={{
-                        latitude: INITIAL_REGION.latitude,
-                        longitude: INITIAL_REGION.longitude,
-                    }}
-                    onPress={handleMarkerPress}
+            <Modal visible={isLoading} transparent={true} animationType="fade">
+                <View style={styles.loadingOverlay}>
+                    <ActivityIndicator size="large" color="#CA5038" />
+                </View>
+            </Modal>
+            {successMessage && (
+                <Animated.View style={[styles.overlayContainer, { opacity: fadeAnim }]}>
+                    <View style={styles.successOverlayContent}>
+                        <TouchableOpacity
+                            style={styles.closeMenuButton}
+                            onPress={() => setSuccessMessage('')}
+                        >
+                            <CloseIcon width={20} height={20} />
+                        </TouchableOpacity>
+                        <Text style={styles.successHeader}>Success!</Text>
+                        <Text style={styles.successBody}>{successMessage}</Text>
+                    </View>
+                </Animated.View>
+            )}
+            {currentRegion ? (
+                <MapView
+                    ref={mapRef}
+                    style={styles.map}
+                    region={currentRegion}
                 >
-                    {/* Custom Image for Marker */}
-                    <Image
-                        source={require('../assets/logo/userMarker.png')}
-                        style={styles.markerImage}
-                    />
-                </Marker>
-            </MapView>
-            <TouchableOpacity
-                style={styles.menuButton}
-                onPress={() => setIsMenuVisible(true)}
-            >
-                <MenuIcon width={45} height={45} />
-            </TouchableOpacity>
+                    {/* Custom Marker */}
+                    <Marker
+                        coordinate={{
+                            latitude: currentRegion.latitude,
+                            longitude: currentRegion.longitude,
+                        }}
+                        title="You are here"
+                        onPress={async () => {
+                            setIsLoading(true);
+                            try {
+                                const userId = await AsyncStorage.getItem('spotifyUserId');
+                                const cachedProfile = JSON.parse(await AsyncStorage.getItem('userData'));
+                                console.log("test", cachedProfile);
+
+                                if (!userId) {
+                                    throw new Error("User ID not found.");
+                                }
+
+                                await syncUserDataPeriodically(userId);
+
+                                const updatedUserData = await fetchUserProfile(userId);
+
+                                setUserData(updatedUserData);
+                                setIsOverlayVisible(true);
+                            } catch (error) {
+                                console.error("Error syncing user data:", error.message);
+                                Alert.alert("Error", "Failed to fetch user music data. Try Again.");
+                            } finally {
+                                setIsLoading(false);
+                            }
+                        }}
+                    >
+                        {/* Custom Image for Marker */}
+                        <Image
+                            source={require('../assets/logo/userMarker.png')}
+                            style={[
+                                styles.markerImage,
+                                { opacity: isGhostModeEnabled ? 0.5 : 1 },
+                            ]}
+                        />
+                    </Marker>
+                </MapView>
+            ) : null}
+            <View style={styles.menuRecenterContainer}>
+                <TouchableOpacity style={styles.menuButton} onPress={() => setIsMenuVisible(true)}>
+                    <MenuIcon width={45} height={45} />
+                </TouchableOpacity>
+                <View style={styles.divider} />
+                <TouchableOpacity
+                    style={styles.recenterButton}
+                    onPress={() => {
+                        if (mapRef.current && currentRegion) {
+                            mapRef.current.animateToRegion(currentRegion, 1000);
+                        }
+                    }}
+                >
+                    <RecenterIcon width={45} height={45} />
+                </TouchableOpacity>
+            </View>
             {isMenuVisible && (
                 <View style={styles.menuOverlay}>
                     <View style={styles.menuContainer}>
@@ -127,7 +269,7 @@ export default function Map({ navigation }) {
                         </TouchableOpacity>
                         <View style={styles.menuContent}>
                             <View style={styles.menuItemContainer}>
-                                <TouchableOpacity style={styles.menuItem}>
+                                <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('Likes')}>
                                     <HeartIcon width={50} height={50} />
 
                                 </TouchableOpacity>
@@ -170,17 +312,17 @@ export default function Map({ navigation }) {
                             </TouchableOpacity>
 
                             <View style={styles.userSummary}>
-                                {userData.profile.profilePic ? (
+                                {userData.profilePic ? (
                                     <Image
-                                        source={{ uri: userData.profile.profilePic }}
+                                        source={{ uri: userData.profilePic }}
                                         style={styles.profilePic}
                                     />
                                 ) : (
                                     <ProfileIcon width={60} height={60} style={styles.profilePic} />
                                 )}
                                 <View style={styles.userSummaryText}>
-                                    <Text style={styles.userName}>{userData.profile.displayName}</Text>
-                                    <Text style={styles.userDistance}>• This is you</Text>
+                                    <Text style={styles.userName}>{userData.username || 'Unknown User'}</Text>
+                                    <Text style={styles.userDistance}>This is you</Text>
                                 </View>
                             </View>
 
@@ -206,10 +348,28 @@ export default function Map({ navigation }) {
                             </View>
 
                             <View style={styles.songInteractions}>
-                                <TouchableOpacity style={styles.likeSongBtn}>
-                                    <HeartIcon width={30} height={30} />
+                                <TouchableOpacity style={[
+                                    styles.likeSongBtn,
+                                    !userData.currentlyPlaying.uri && { opacity: 0.5 },
+                                ]}
+                                    onPress={handleLikeButtonPress}
+                                    disabled={!userData.currentlyPlaying.uri}>
+                                    {isLiked ? (
+                                        <HeartIcon width={30} height={30} />
+                                    ) : (
+                                        <OutlineHeartIcon width={30} height={30} />
+                                    )}
                                 </TouchableOpacity>
-                                <TouchableOpacity style={styles.addToPlaylistBtn}>
+                                <TouchableOpacity
+                                    style={[
+                                        styles.addToPlaylistBtn,
+                                        !userData.currentlyPlaying.uri && { opacity: 0.5 },
+                                    ]}
+                                    onPress={() =>
+                                        navigation.navigate('AddToPlaylist', { songInfo: userData.currentlyPlaying })
+                                    }
+                                    disabled={!userData.currentlyPlaying.uri}
+                                >
                                     <PlusIcon width={30} height={30} />
                                 </TouchableOpacity>
                             </View>
@@ -232,6 +392,30 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
     },
+    successOverlayContent: {
+        width: '80%',
+        maxHeight: '70%',
+        backgroundColor: '#93CE89',
+        padding: 20,
+        borderRadius: 15,
+        shadowColor: '#000',
+        shadowOpacity: 0.3,
+        shadowRadius: 3,
+        shadowOffset: { width: 0, height: 2 },
+        justifyContent: 'space-between',
+    },
+    successHeader: {
+        color: '#FFF',
+        fontSize: 40,
+        fontWeight: 'bold',
+        marginBottom: 5,
+        textAlign: 'center',
+    },
+    successBody: {
+        color: '#FFF',
+        fontSize: 30,
+        textAlign: 'left',
+    },
     map: {
         width: '100%',
         height: '100%',
@@ -240,6 +424,13 @@ const styles = StyleSheet.create({
         width: 50,
         height: 50,
         resizeMode: 'contain',
+    },
+    errorText: {
+        flex: 1,
+        textAlign: 'center',
+        textAlignVertical: 'center',
+        fontSize: 16,
+        color: 'red',
     },
     overlayImageContainer: {
         flex: 1,
@@ -275,7 +466,6 @@ const styles = StyleSheet.create({
         shadowOffset: { width: 0, height: 2 },
         justifyContent: 'space-between',
     },
-
     closeOverlayBtn: {
         alignSelf: 'flex-end',
     },
@@ -299,11 +489,12 @@ const styles = StyleSheet.create({
     },
     userName: {
         color: "#FFFFFF",
-        fontSize: 16,
+        fontSize: 24,
         fontWeight: 600,
         whiteSpace: 'nowrap',
     },
     userDistance: {
+        fontSize: "20",
         color: "#202020"
     },
     currentlyListeningHeader: {
@@ -360,13 +551,29 @@ const styles = StyleSheet.create({
         padding: 4,
         borderRadius: 10
     },
-    menuButton: {
+    menuRecenterContainer: {
         position: 'absolute',
-        top: 40,
+        top: 50,
         left: 20,
+        alignItems: 'center',
         zIndex: 9,
         backgroundColor: '#EAC255',
-        borderRadius: 8
+        borderRadius: 8,
+        padding: 5
+    },
+    menuButton: {
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    divider: {
+        width: '80%',
+        height: 1,
+        backgroundColor: '#CA5038',
+        marginVertical: 5
+    },
+    recenterButton: {
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     menuOverlay: {
         position: 'absolute',
@@ -381,9 +588,6 @@ const styles = StyleSheet.create({
     },
     menuContainer: {
         position: 'absolute',
-        top: '20%',
-        left: '10%',
-        right: '10%',
         width: '80%',
         backgroundColor: '#EAC255',
         padding: 20,
@@ -438,5 +642,11 @@ const styles = StyleSheet.create({
         color: '#F8EEDF',
         fontSize: 24,
         fontWeight: '800',
+    },
+    loadingOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        justifyContent: 'center',
+        alignItems: 'center',
     },
 });

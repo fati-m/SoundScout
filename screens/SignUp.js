@@ -1,27 +1,21 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Image } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Image, KeyboardAvoidingView, ScrollView, Platform, Modal, ActivityIndicator } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import { createAccount } from './utils/backendUtils';
-
-/**
- * SignUp.js
- * Allows users to sign up for the app with prefilled data from Spotify.
- * Includes fields for username, profile picture, email (grayed out), password, and confirm password.
- */
 
 export default function SignUp({ route, navigation }) {
     const { userProfile } = route.params;
     const [username, setUsername] = useState(userProfile.display_name || '');
     const [profilePic, setProfilePic] = useState(userProfile.images?.[0]?.url || null);
-    const [email] = useState(userProfile.email || ''); // Ensure email is set
+    const [email] = useState(userProfile.email || '');
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [errorMessage, setErrorMessage] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
 
     const handleSignUp = async () => {
         try {
-            // Validate password and confirm password
             if (password.length < 8) {
                 setErrorMessage('Password must be at least 8 characters long.');
                 return;
@@ -42,144 +36,167 @@ export default function SignUp({ route, navigation }) {
                 return;
             }
 
-            // Clear error message
             setErrorMessage('');
 
-            // Prepare user profile data
+            setIsLoading(true);
+
             const userProfileData = {
+                id: userProfile.id,
                 username,
                 email,
                 password,
-                profilePicUri: profilePic, // Use the updated profilePic state
+                profilePicUri: profilePic,
+                isGhostMode: false,
+                isGridView: false
             };
 
-            // Call createAccount from backendUtils
             const newAccount = await createAccount(userProfileData);
             console.log('Account created successfully:', newAccount);
 
-            // Navigate to the next screen
             const accessToken = await AsyncStorage.getItem('spotifyAccessToken');
             navigation.navigate('Map', { token: accessToken });
         } catch (error) {
             console.error('Error creating account:', error);
             setErrorMessage('Error creating account. Please try again.');
+        } finally {
+            setIsLoading(false);
         }
     };
 
     const handleChangeProfilePic = async () => {
+        setIsLoading(true);
         try {
-            // Request media library permissions
             const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
             if (!permissionResult.granted) {
                 alert('Permission to access media library is required.');
                 return;
             }
 
-            // Launch the image picker
             const result = await ImagePicker.launchImageLibraryAsync({
-                mediaTypes: 'images',
                 allowsEditing: true,
-                aspect: [1, 1], // Square aspect ratio
+                aspect: [1, 1],
                 quality: 1,
             });
 
-            if (!result.canceled) {
-                setProfilePic(result.assets[0].uri);
+            if (!result.canceled && result.assets && result.assets.length > 0) {
+                const selectedImage = result.assets[0].uri;
+                setProfilePic(selectedImage);
             }
         } catch (error) {
-            console.error('Error changing profile picture:', error);
+            console.error('Error changing profile picture:', error.message);
+        } finally {
+            setIsLoading(false);
         }
     };
 
     return (
-        <View style={styles.container}>
-            <View style={styles.headerContainer}>
-                <Text style={styles.header}>Sign Up</Text>
-            </View>
-
-            {/* Profile Picture */}
-            <Text style={styles.label}>Profile Picture</Text>
-            {profilePic ? (
-                <Image source={{ uri: profilePic }} style={styles.profilePic} />
-            ) : (
-                <View style={styles.profilePicPlaceholder}>
-                    <Text style={styles.profilePicPlaceholderText}>No Profile Pic</Text>
+        <KeyboardAvoidingView
+            style={{ flex: 1 }}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+            <Modal visible={isLoading} transparent={true} animationType="fade">
+                <View style={styles.loadingOverlay}>
+                    <ActivityIndicator size="large" color="#CA5038" />
                 </View>
-            )}
+            </Modal>
+            <ScrollView contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled">
+                <View style={styles.container}>
+                    <View style={styles.backButtonContainer}>
+                        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+                            <Text style={styles.backButtonText}>&lt; Back</Text>
+                        </TouchableOpacity>
+                    </View>
+                    <View style={styles.headerContainer}>
+                        <Text style={styles.header}>Sign Up</Text>
+                    </View>
 
-            <TouchableOpacity
-                style={styles.button}
-                onPress={() => {
-                    // TODO: Add functionality to upload a new profile picture
-                    console.log('Upload new profile pic');
-                }}
-            >
-                <Text style={styles.buttonText} onPress={handleChangeProfilePic}>Change Profile Picture</Text>
-            </TouchableOpacity>
+                    <Text style={styles.label}>Profile Picture</Text>
+                    {profilePic ? (
+                        <Image source={{ uri: profilePic }} style={styles.profilePic} />
+                    ) : (
+                        <View style={styles.profilePicPlaceholder}>
+                            <Text style={styles.profilePicPlaceholderText}>No Profile Pic</Text>
+                        </View>
+                    )}
+                    <TouchableOpacity style={styles.button} onPress={handleChangeProfilePic}>
+                        <Text style={styles.buttonText}>Change Profile Picture</Text>
+                    </TouchableOpacity>
 
-            {/* Username */}
-            <Text style={styles.label}>Username</Text>
-            <TextInput
-                style={styles.input}
-                value={username}
-                onChangeText={setUsername}
-                placeholder="Enter your username"
-            />
+                    <Text style={styles.label}>Username</Text>
+                    <TextInput
+                        style={styles.input}
+                        value={username}
+                        onChangeText={setUsername}
+                        placeholder="Enter your username"
+                    />
 
-            {/* Email (Read-only) */}
-            <Text style={styles.label}>Email</Text>
-            <TextInput
-                style={[styles.input, styles.disabledInput]}
-                value={email}
-                editable={false}
-            />
+                    <Text style={styles.label}>Email</Text>
+                    <TextInput style={[styles.input, styles.disabledInput]} value={email} editable={false} />
 
-            {/* Password */}
-            <Text style={styles.label}>Password</Text>
-            <TextInput
-                style={styles.input}
-                value={password}
-                onChangeText={setPassword}
-                placeholder="Enter your password"
-                secureTextEntry
-            />
-            <Text style={styles.passwordRequirements}>
-                Password must be at least 8 characters long, include one uppercase letter, and one number.
-            </Text>
+                    <Text style={styles.label}>Password</Text>
+                    <TextInput
+                        style={styles.input}
+                        value={password}
+                        onChangeText={setPassword}
+                        placeholder="Enter your password"
+                        secureTextEntry
+                    />
+                    <Text style={styles.passwordRequirements}>
+                        Password must be at least 8 characters long, include one uppercase letter, and one
+                        number.
+                    </Text>
 
-            {/* Confirm Password */}
-            <Text style={styles.label}>Confirm Password</Text>
-            <TextInput
-                style={styles.input}
-                value={confirmPassword}
-                onChangeText={setConfirmPassword}
-                placeholder="Confirm your password"
-                secureTextEntry
-            />
+                    <Text style={styles.label}>Confirm Password</Text>
+                    <TextInput
+                        style={styles.input}
+                        value={confirmPassword}
+                        onChangeText={setConfirmPassword}
+                        placeholder="Confirm your password"
+                        secureTextEntry
+                    />
 
-            {/* Error Message */}
-            {errorMessage ? <Text style={styles.error}>{errorMessage}</Text> : null}
+                    {errorMessage ? <Text style={styles.error}>{errorMessage}</Text> : null}
 
-            {/* Submit Button */}
-            <TouchableOpacity style={styles.submitButton} onPress={handleSignUp}>
-                <Text style={styles.submitButtonText}>Create Account</Text>
-            </TouchableOpacity>
-        </View>
+                    <TouchableOpacity style={styles.submitButton} onPress={() => {
+                        setIsLoading(true);
+                        setTimeout(handleSignUp, 0);
+                    }}>
+                        <Text style={styles.submitButtonText}>Create Account</Text>
+                    </TouchableOpacity>
+                </View>
+            </ScrollView>
+        </KeyboardAvoidingView>
     );
 }
 
 const styles = StyleSheet.create({
+    scrollContainer: {
+        flexGrow: 1,
+    },
     container: {
         flex: 1,
         padding: 20,
         backgroundColor: '#F8EEDF',
+    },
+    backButtonContainer: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        justifyContent: 'flex-start',
+    },
+    backButton: {
+        marginTop: 40,
+    },
+    backButtonText: {
+        color: '#CA5038',
+        fontWeight: 'bold',
+        fontSize: 24,
     },
     headerContainer: {
         backgroundColor: '#CA5038',
         alignSelf: 'center',
         padding: 5,
         borderRadius: 20,
-        marginVertical: 40,
+        marginBottom: 40,
         width: 200,
     },
     header: {
@@ -253,5 +270,11 @@ const styles = StyleSheet.create({
         color: '#fff',
         fontWeight: 'bold',
         fontSize: 16,
+    },
+    loadingOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        justifyContent: 'center',
+        alignItems: 'center',
     },
 });
