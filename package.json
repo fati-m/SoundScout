@@ -43,7 +43,8 @@
     "react-native-randombytes": "^3.6.1",
     "react-native-svg": "^15.8.0",
     "react-native-web": "~0.19.13",
-    "typescript": "^5.3.3"
+    "typescript": "^5.3.3",
+    "ws": "^8.18.0"
   },
   "devDependencies": {
     "@babel/core": "^7.20.0",
