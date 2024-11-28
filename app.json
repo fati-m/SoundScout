@@ -3,25 +3,43 @@
     "name": "SoundScout",
     "slug": "SoundScout",
     "version": "1.0.0",
+    "platforms": [
+      "ios",
+      "android"
+    ],
+    "scheme": "soundscout",
     "orientation": "portrait",
-    "icon": "./assets/logo/soundScoutLogoNoBkgrd.png",
+    "icon": "assets/logo/soundScoutLogoNoBkgrd.png",
     "userInterfaceStyle": "light",
     "splash": {
-      "image": "./assets/logo/soundScoutLogoNoBkgrd.png",
+      "image": "assets/logo/soundScoutLogoNoBkgrd.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.yourname.soundscout",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Allow SoundScout to access your location while the app is in use."
+      }
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/logo/soundScoutLogoNoBkgrd.png",
+        "foregroundImage": "assets/logo/soundScoutLogoNoBkgrd.png",
         "backgroundColor": "#ffffff"
-      }
+      },
+      "package": "com.yourname.soundscout",
+      "permissions": [
+        "ACCESS_FINE_LOCATION"
+      ]
     },
     "web": {
       "favicon": "assets/logo/soundScoutLogoNoBkgrd.png"
-    }
+    },
+    "newArchEnabled": false,
+    "plugins": [
+      "expo-secure-store",
+      "expo-asset"
+    ]
   }
 }
