@@ -183,9 +183,6 @@ export const signOut = async () => {
   }
 };
 
-import { deleteDoc, doc } from "firebase/firestore";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { firestore } from "./firebase";
 
 /**
  * Deletes a user's account from Firestore by their Spotify ID.
