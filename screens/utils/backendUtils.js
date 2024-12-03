@@ -183,21 +183,48 @@ export const signOut = async () => {
   }
 };
 
+import { deleteDoc, doc } from "firebase/firestore";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { firestore } from "./firebase";
+
 /**
  * Deletes a user's account from Firestore by their Spotify ID.
  * @param {string} id - The Spotify ID of the user to delete.
+ * @param {boolean} [clearLocalStorage=true] - Whether to clear local AsyncStorage.
  * @returns {Promise<void>} - Resolves when the account is deleted successfully.
  */
-export const deleteAccount = async (id) => {
-  // TODO
-  // Step 1: Validate that the `id` parameter is provided. Throw an error if it's missing.
+export const deleteAccount = async (id, clearLocalStorage = true) => {
+  // Input validation
+  if (!id || typeof id !== "string") {
+    throw new Error("Invalid Spotify ID: Must be a non-empty string.");
+  }
 
-  // Step 2: Use Firestore's `deleteDoc` function to remove the user document associated with the given ID.
+  try {
+    // Delete user document from Firestore
+    const userDocRef = doc(firestore, "users", id);
+    await deleteDoc(userDocRef);
 
-  // Step 3: Clear all cached user data in `AsyncStorage` to ensure local consistency.
+    // Optionally clear AsyncStorage
+    if (clearLocalStorage) {
+      await AsyncStorage.clear();
+    }
 
-  // Step 4: Log the success or any errors that occur during the deletion process for debugging.
+    console.log(`Account with Spotify ID ${id} successfully deleted.`);
+  } catch (error) {
+    // Differentiate between Firestore and AsyncStorage errors
+    if (error instanceof Error) {
+      console.error("Account Deletion Error:", {
+        message: error.message,
+        name: error.name,
+        stack: error.stack,
+      });
+    }
+
+    // Re-throw for upstream error handling
+    throw error;
+  }
 };
+
 
 /**
  * Updates a user's display name.
