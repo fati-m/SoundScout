@@ -16,6 +16,7 @@ import {
     isGhostMode,
     toggleGhostMode
 } from './utils/backendUtils';
+
 import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -77,7 +78,6 @@ export default function Settings({ navigation }) {
                 setErrorMessage("Please enter your password to confirm.");
                 return;
             }
-
             const isValid = await validatePassword(userId, password);
             if (!isValid) {
                 setErrorMessage("Incorrect password. Please try again.");
@@ -94,8 +94,11 @@ export default function Settings({ navigation }) {
             setErrorMessage('Failed to delete account. Please try again.');
         } finally {
             setIsLoading(false);
+            setShowDeletePopup(false);
+            navigation.navigate("Login");
         }
     };
+    
 
     const handleChangeProfilePic = async () => {
         try {

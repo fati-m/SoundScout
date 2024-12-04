@@ -1,12 +1,14 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage } from './firebaseConfig';
-import { doc, setDoc, getDoc, updateDoc } from "firebase/firestore";
+import { doc, setDoc, getDoc, updateDoc, deleteDoc } from "firebase/firestore";
 import * as Crypto from 'expo-crypto';
 import bcrypt from 'react-native-bcrypt';
 import { getCurrentlyPlaying } from './spotify';
 import * as FileSystem from 'expo-file-system';
 import * as Location from 'expo-location';
+import { initializeApp } from 'firebase/app';
+import { getFirestore } from 'firebase/firestore';
 
 bcrypt.setRandomFallback((len) => {
   const randomBytes = Crypto.getRandomBytes(len);
@@ -184,41 +186,52 @@ export const signOut = async () => {
 };
 
 
-/**
- * Deletes a user's account from Firestore by their Spotify ID.
- * @param {string} id - The Spotify ID of the user to delete.
- * @param {boolean} [clearLocalStorage=true] - Whether to clear local AsyncStorage.
- * @returns {Promise<void>} - Resolves when the account is deleted successfully.
- */
 export const deleteAccount = async (id, clearLocalStorage = true) => {
-  // Input validation
-  if (!id || typeof id !== "string") {
-    throw new Error("Invalid Spotify ID: Must be a non-empty string.");
-  }
-
   try {
-    // Delete user document from Firestore
-    const userDocRef = doc(firestore, "users", id);
+    // Input validation
+    if (!id || typeof id !== "string") {
+      return { success: false, message: "Invalid Spotify ID." };
+    }
+
+    // Get Firestore instance
+    const db = getFirestore();
+
+    // Create a reference to the user document
+    const userDocRef = doc(db, "users", id);
+
+    // Check if the document exists before attempting to delete
+    const docSnap = await getDoc(userDocRef);
+    if (!docSnap.exists()) {
+      return { success: false, message: `User document with ID ${id} does not exist.` };
+    }
+
+    // Delete the document
     await deleteDoc(userDocRef);
 
     // Optionally clear AsyncStorage
-    if (clearLocalStorage) {
-      await AsyncStorage.clear();
-    }
+    //if (clearLocalStorage) {
+      //try {
+       // await AsyncStorage.clear();
+      //} catch (storageError) {
+       // return {
+        //  success: true,
+        //  message: "Account deleted, but local storage clearing encountered issues.",
+       // };
+     // }
+    //}
 
-    console.log(`Account with Spotify ID ${id} successfully deleted.`);
+    // Return success if everything was successful
+    return { success: true, message: "Account deleted successfully." };
+
   } catch (error) {
-    // Differentiate between Firestore and AsyncStorage errors
-    if (error instanceof Error) {
-      console.error("Account Deletion Error:", {
-        message: error.message,
-        name: error.name,
-        stack: error.stack,
-      });
+    // Handle specific error codes
+    if (error.code === 'permission-denied') {
+      return { success: false, message: "Not authorized to delete this user document." };
+    } else if (error.code === 'unavailable') {
+      return { success: false, message: "Firestore service is unavailable. Please try again later." };
+    } else {
+      return { success: false, message: "An error occurred while deleting the account." };
     }
-
-    // Re-throw for upstream error handling
-    throw error;
   }
 };
 
