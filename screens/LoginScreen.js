@@ -56,7 +56,7 @@ export default function LoginScreen({ navigation }) {
           if (isExistingAccount) {
             const userData = await fetchUserProfile(userProfile.id);
             await AsyncStorage.setItem('userData', JSON.stringify(userData));
-
+            
             navigation.navigate('Map');
           } else {
             navigation.navigate('SignUp', { userProfile });

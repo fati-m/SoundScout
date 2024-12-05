@@ -234,5 +234,5 @@ export {
   getUserProfile,
   getUserPlaylists,
   getCurrentlyPlaying,
-  ensureValidAccessToken
+  ensureValidAccessToken,
 };

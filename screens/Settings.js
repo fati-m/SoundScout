@@ -14,14 +14,14 @@ import {
     updateProfilePicture,
     updatePassword,
     isGhostMode,
-    toggleGhostMode
+    toggleGhostMode,
+    isGridView,
+    toggleGridView
 } from './utils/backendUtils';
 import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function Settings({ navigation }) {
-    const [isMapView, setIsMapView] = useState(true);
-    const toggleView = () => setIsMapView(!isMapView);
     const [showDeletePopup, setShowDeletePopup] = useState(false);
     const [password, setPassword] = useState('');
     const [showEditProfilePopup, setShowEditProfilePopup] = useState(false);
@@ -63,6 +63,19 @@ export default function Settings({ navigation }) {
         };
 
         fetchInitialGhostModeState();
+    }, []);
+
+    useEffect(() => {
+        const fetchInitialGridViewState = async () => {
+            try {
+                const gridViewState = await isGridView();
+                setIsGridViewEnabled(gridViewState);
+            } catch (error) {
+                console.error('Error fetching initial Grid View state:', error.message);
+            }
+        };
+
+        fetchInitialGridViewState();
     }, []);
 
     const handleDeleteAccount = async () => {
@@ -144,9 +157,30 @@ export default function Settings({ navigation }) {
             Alert.alert('Error', 'Failed to toggle Ghost Mode. Please try again.');
         }
     };
-
+    
     const handleToggleGridView = async () => {
-        const success = await toggleGridView(!isGridViewEnabled);
+        try {
+            const newGridViewState = !isGridViewEnabled;
+            console.log('Grid View toggled in Settings:', newGridViewState);
+            const success = await toggleGridView(!isGridViewEnabled, {navigation}); 
+            if (!success) {
+                Alert.alert('Error', 'Failed to toggle to Grid View. Please try again.');
+                return;
+            }
+
+            setIsGridViewEnabled(newGridViewState);
+
+            Alert.alert(
+                newGridViewState ? 'Grid View Enabled' : 'Grid View Disabled',
+                newGridViewState
+                    ? 'Your Home Screen is now in Grid View.'
+                    : 'Your Home Screen is now in Map View.'
+            );
+        } catch (error) {
+            console.error('Error toggling Grid View:', error.message);
+            Alert.alert('Error', 'Failed to toggle to Grid View. Please try again.');
+        }
+       
         if (success) {
             setIsGridViewEnabled(!isGridViewEnabled);
         } else {
@@ -192,22 +226,6 @@ export default function Settings({ navigation }) {
             console.error("Error during sign out:", error.message);
         }
     };
-
-    const syncGhostModeState = async () => {
-        try {
-            const isGhostMode = await AsyncStorage.getItem('userData');
-            const userData = isGhostMode ? JSON.parse(isGhostMode) : {};
-            if (userData.isGhostMode !== undefined) {
-                await toggleGhostMode(userData.isGhostMode);
-            }
-        } catch (error) {
-            console.error('Error syncing Ghost Mode state:', error.message);
-        }
-    };
-
-    useEffect(() => {
-        syncGhostModeState();
-    }, []);
 
     useEffect(() => {
         const fetchUserInfo = async () => {
@@ -287,10 +305,10 @@ export default function Settings({ navigation }) {
                         </View>
                     </View>
                     <Switch
-                        value={isMapView}
-                        onValueChange={toggleView}
+                        value={isGridViewEnabled}
+                        onValueChange={handleToggleGridView}
                         trackColor={{ false: '#767577', true: '#EAC255' }}
-                        thumbColor={isMapView ? '#93CE89' : '#EAC255'}
+                        thumbColor={isGridViewEnabled ? '#93CE89' : '#EAC255'}
                     />
                 </View>
                 <TouchableOpacity

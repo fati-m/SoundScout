@@ -18,16 +18,17 @@ import {
     isSongLiked,
     addSongToLikes,
     removeSongFromLikes,
+    isGridView,
 } from './utils/backendUtils';
 import * as Location from 'expo-location';
 
-
+// the main configuration for the Map Home Screen
 export default function Map({ navigation, route }) {
     const mapRef = useRef(null);
     const [isLoading, setIsLoading] = useState(true);
     const [currentRegion, setCurrentRegion] = useState(null);
     const [isGhostModeEnabled, setIsGhostModeEnabled] = useState(false);
-    // const [isGridViewEnabled, setIsGridViewEnabled] = useState(false);
+    const [isGridViewEnabled, setIsGridViewEnabled] = useState(false);
     const [isMenuVisible, setIsMenuVisible] = useState(false);
     const [isOverlayVisible, setIsOverlayVisible] = useState(false);
     const [isLiked, setIsLiked] = useState(false);
@@ -47,6 +48,10 @@ export default function Map({ navigation, route }) {
                 const ghostMode = await isGhostMode();
                 console.log("Initial Ghost Mode state:", ghostMode);
                 setIsGhostModeEnabled(ghostMode);
+
+                const gridView = await isGridView();
+                console.log("Initial Grid View state:", gridView);
+                setIsGridViewEnabled(gridView);
 
                 const userId = await AsyncStorage.getItem('spotifyUserId');
                 const userProfile = await fetchUserProfile(userId);
@@ -116,12 +121,30 @@ export default function Map({ navigation, route }) {
                 const userData = userDataString ? JSON.parse(userDataString) : {};
                 setIsGhostModeEnabled(userData.isGhostMode || false);
                 console.log("Ghost Mode state updated:", userData.isGhostMode);
+
             } catch (error) {
                 console.error("Error syncing Ghost Mode state:", error.message);
             }
         };
 
         const interval = setInterval(syncGhostModeState, 1000);
+        return () => clearInterval(interval);
+    }, []);
+
+    useEffect(() => {
+        const syncGridModeState = async () => {
+            try {
+                const userDataString = await AsyncStorage.getItem('userData');
+                const userData = userDataString ? JSON.parse(userDataString) : {};
+                setIsGridViewEnabled(userData.isGridView || false); 
+                console.log("Grid View state updated:", userData.isGridView);
+
+            } catch (error) {
+                console.error("Error switching from Map View to Grid View:", error.message);
+            }
+        };
+
+        const interval = setInterval(syncGridModeState, 1000);
         return () => clearInterval(interval);
     }, []);
 
@@ -284,14 +307,14 @@ export default function Map({ navigation, route }) {
                                 <Text style={styles.menuText}>Settings</Text>
                             </View>
                             {/* Add additional menu items here */}
-                            <View style={styles.menuItemContainer}>
+                            {/* <View style={styles.menuItemContainer}>
                                 <TouchableOpacity
                                     style={styles.menuItem}
                                     onPress={() => navigation.navigate('Recommendations')}>
                                     <RecommendIcon width={50} height={50} />
                                 </TouchableOpacity>
                                 <Text style={styles.menuText}>You'll Like</Text>
-                            </View>
+                            </View> */}
                         </View>
                         <View style={styles.menuTitleContainer}>
                             <Text style={styles.menuTitle}>MAIN MENU</Text>

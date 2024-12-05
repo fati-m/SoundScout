@@ -302,8 +302,69 @@ export const toggleGhostMode = async (enabled) => {
 
     console.log("Ghost Mode updated successfully.");
     return true;
+
   } catch (error) {
     console.error("Error toggling Ghost Mode:", error.message);
+    return false;
+  }
+};
+
+/**
+ * Checks if Grid View is enabled for the current user.
+ * @returns {Promise<boolean>} - Returns `true` if Grid View is enabled, `false` otherwise.
+ */
+export const isGridView = async () => {
+  try {
+    const cachedData = JSON.parse(await AsyncStorage.getItem('userData'));
+
+    if (cachedData?.isGridView !== undefined) {
+      return cachedData.isGridView;
+    }
+
+    const userId = await AsyncStorage.getItem('spotifyUserId');
+    const userDocRef = doc(db, 'users', userId);
+    const userDoc = await getDoc(userDocRef);
+
+    if (!userDoc.exists()) {
+      return false;
+    }
+
+    const firestoreData = userDoc.data();
+    return firestoreData?.isGridView ?? false;
+  } catch (error) {
+    console.error('Error checking for Grid View:', error.message);
+    throw error;
+  }
+};
+
+/**
+ * Toggles the user's Grid View setting.
+ * @param {boolean} enabled - Whether to enable or disable Grid View.
+ * @returns {Promise<boolean>} - Returns `true` if the update was successful, `false` otherwise.
+ */
+export const toggleGridView = async (enabled, {navigation}) => {
+  try {
+    const userId = await AsyncStorage.getItem('spotifyUserId');
+
+    const userDocRef = doc(db, 'users', userId);
+    await updateDoc(userDocRef, { isGridView: enabled });
+
+    const cachedData = JSON.parse(await AsyncStorage.getItem('userData'));
+    const updatedData = { ...cachedData, isGridView: enabled };
+    await AsyncStorage.setItem('userData', JSON.stringify(updatedData));
+
+    if (enabled) {
+      navigation.navigate('Grid')
+
+    } else {
+      navigation.navigate('Map')
+    }
+
+    console.log("Grid View updated successfully.");
+    return true;
+
+  } catch (error) {
+    console.error("Error toggling Grid View:", error.message);
     return false;
   }
 };
