@@ -16,7 +16,7 @@ import HeartIcon from '../assets/logo/heart.svg';
 import PlusIcon from '../assets/logo/plus.svg';
 import { removeSongFromLikes, fetchUserProfile } from './utils/backendUtils';
 
-export default function Likes({ navigation }) {
+export default function Likes({ navigation, route }) {
     const [likedSongs, setLikedSongs] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
@@ -64,6 +64,8 @@ export default function Likes({ navigation }) {
         }
     };
 
+    const { updateLikedSongsState } = route.params || {};
+
     const handleUnlike = async (song) => {
         try {
             setLoading(true);
@@ -78,6 +80,7 @@ export default function Likes({ navigation }) {
             if (success) {
                 const updatedSongs = likedSongs.filter((s) => s.uri !== song.uri);
                 setLikedSongs(updatedSongs);
+                setFilteredLikedSongs(updatedSongs);
 
                 const userDataString = await AsyncStorage.getItem('userData');
                 const userData = userDataString ? JSON.parse(userDataString) : {};
@@ -85,6 +88,10 @@ export default function Likes({ navigation }) {
                     'userData',
                     JSON.stringify({ ...userData, likedSongs: updatedSongs })
                 );
+
+                if (updateLikedSongsState) {
+                    updateLikedSongsState([{ uri: song.uri, liked: false }]);
+                }
             }
         } catch (error) {
             console.error('Error unliking song:', error);
