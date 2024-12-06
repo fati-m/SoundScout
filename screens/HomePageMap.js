@@ -120,7 +120,7 @@ export default function Map({ navigation, route }) {
                 const userDataString = await AsyncStorage.getItem('userData');
                 const userData = userDataString ? JSON.parse(userDataString) : {};
                 setIsGhostModeEnabled(userData.isGhostMode || false);
-                console.log("Ghost Mode state updated:", userData.isGhostMode);
+                // console.log("Ghost Mode state updated:", userData.isGhostMode);
 
             } catch (error) {
                 console.error("Error syncing Ghost Mode state:", error.message);
@@ -136,8 +136,8 @@ export default function Map({ navigation, route }) {
             try {
                 const userDataString = await AsyncStorage.getItem('userData');
                 const userData = userDataString ? JSON.parse(userDataString) : {};
-                setIsGridViewEnabled(userData.isGridView || false); 
-                console.log("Grid View state updated:", userData.isGridView);
+                setIsGridViewEnabled(userData.isGridView || false);
+                // console.log("Grid View state updated:", userData.isGridView);
 
             } catch (error) {
                 console.error("Error switching from Map View to Grid View:", error.message);
@@ -187,7 +187,7 @@ export default function Map({ navigation, route }) {
 
             Animated.timing(fadeAnim, {
                 toValue: 0,
-                duration: 8000,
+                duration: 6000,
                 useNativeDriver: true,
             }).start(() => {
                 setSuccessMessage('');

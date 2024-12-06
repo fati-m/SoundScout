@@ -157,12 +157,12 @@ export default function Settings({ navigation }) {
             Alert.alert('Error', 'Failed to toggle Ghost Mode. Please try again.');
         }
     };
-    
+
     const handleToggleGridView = async () => {
         try {
             const newGridViewState = !isGridViewEnabled;
             console.log('Grid View toggled in Settings:', newGridViewState);
-            const success = await toggleGridView(!isGridViewEnabled, {navigation}); 
+            const success = await toggleGridView(!isGridViewEnabled, { navigation });
             if (!success) {
                 Alert.alert('Error', 'Failed to toggle to Grid View. Please try again.');
                 return;
@@ -179,12 +179,6 @@ export default function Settings({ navigation }) {
         } catch (error) {
             console.error('Error toggling Grid View:', error.message);
             Alert.alert('Error', 'Failed to toggle to Grid View. Please try again.');
-        }
-       
-        if (success) {
-            setIsGridViewEnabled(!isGridViewEnabled);
-        } else {
-            Alert.alert('Error', 'Failed to update Grid View setting. Please try again.');
         }
     };
 
@@ -233,7 +227,7 @@ export default function Settings({ navigation }) {
                 setIsLoading(true);
                 const userId = await AsyncStorage.getItem('spotifyUserId');
                 const userProfile = await fetchUserProfile(userId);
-                setDisplayName(userProfile.username || 'Guest');
+                setDisplayName(userProfile.username || 'Unknown User');
                 setProfilePic(userProfile.profilePic || '');
             } catch (error) {
                 console.error('Error fetching user info:', error.message);
