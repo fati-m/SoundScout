@@ -244,29 +244,18 @@ export const deleteAccount = async (id, clearLocalStorage = true) => {
  */
 export const updateDisplayName = async (userId, newDisplayName) => {
   try {
-    // Step 1: Validate inputs
-    if (newDisplayName.length == 0) {
-      throw new Error("Disply name cannot be empty");
-    }
+    // Reference to the user's document in Firestore
+    const userDocRef = doc(db, 'users', userId); 
 
-    // Step 2: Update the `username` field in Firestore
-    const userDocRef = doc(db, "users", userId); // Reference to the user's document
-    await updateDoc(userDocRef, { username: newDisplayName });
+    // Update the display name in Firestore
+    await updateDoc(userDocRef, {
+      username: newDisplayName,
+    });
 
-    // Step 3: Update the cached user data in AsyncStorage
-    const cachedUserData = await AsyncStorage.getItem(`user_${userId}`);
-    if (cachedUserData) {
-      const parsedData = JSON.parse(cachedUserData);
-      parsedData.username = newDisplayName; // Update the username
-      await AsyncStorage.setItem(`user_${userId}`, JSON.stringify(parsedData));
-    }
-
-    // Step 4: Log success
-    console.log(`Successfully updated display name to "${newDisplayName}" for userId: ${userId}`);
+    return true; 
   } catch (error) {
-    // Log any errors
-    console.error("Error updating display name:", error.message);
-    throw error; // Rethrow the error for the caller to handle
+    console.error('Error updating display name:', error.message);
+    return false; 
   }
 };
 
