@@ -14,14 +14,14 @@ import {
     updateProfilePicture,
     updatePassword,
     isGhostMode,
-    toggleGhostMode
+    toggleGhostMode,
+    isGridView,
+    toggleGridView
 } from './utils/backendUtils';
 import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function Settings({ navigation }) {
-    const [isMapView, setIsMapView] = useState(true);
-    const toggleView = () => setIsMapView(!isMapView);
     const [showDeletePopup, setShowDeletePopup] = useState(false);
     const [password, setPassword] = useState('');
     const [showEditProfilePopup, setShowEditProfilePopup] = useState(false);
@@ -65,6 +65,19 @@ export default function Settings({ navigation }) {
         fetchInitialGhostModeState();
     }, []);
 
+    useEffect(() => {
+        const fetchInitialGridViewState = async () => {
+            try {
+                const gridViewState = await isGridView();
+                setIsGridViewEnabled(gridViewState);
+            } catch (error) {
+                console.error('Error fetching initial Grid View state:', error.message);
+            }
+        };
+
+        fetchInitialGridViewState();
+    }, []);
+
     const handleDeleteAccount = async () => {
         try {
             setErrorMessage("");
@@ -87,7 +100,6 @@ export default function Settings({ navigation }) {
             await deleteAccount(userId);
             await AsyncStorage.clear();
             setShowDeletePopup(false);
-
             navigation.navigate('Login');
         } catch (error) {
             console.error('Error deleting account:', error.message);
@@ -146,11 +158,26 @@ export default function Settings({ navigation }) {
     };
 
     const handleToggleGridView = async () => {
-        const success = await toggleGridView(!isGridViewEnabled);
-        if (success) {
-            setIsGridViewEnabled(!isGridViewEnabled);
-        } else {
-            Alert.alert('Error', 'Failed to update Grid View setting. Please try again.');
+        try {
+            const newGridViewState = !isGridViewEnabled;
+            console.log('Grid View toggled in Settings:', newGridViewState);
+            const success = await toggleGridView(!isGridViewEnabled, { navigation });
+            if (!success) {
+                Alert.alert('Error', 'Failed to toggle to Grid View. Please try again.');
+                return;
+            }
+
+            setIsGridViewEnabled(newGridViewState);
+
+            Alert.alert(
+                newGridViewState ? 'Grid View Enabled' : 'Grid View Disabled',
+                newGridViewState
+                    ? 'Your Home Screen is now in Grid View.'
+                    : 'Your Home Screen is now in Map View.'
+            );
+        } catch (error) {
+            console.error('Error toggling Grid View:', error.message);
+            Alert.alert('Error', 'Failed to toggle to Grid View. Please try again.');
         }
     };
 
@@ -158,32 +185,52 @@ export default function Settings({ navigation }) {
         const userId = await AsyncStorage.getItem('spotifyUserId');
         try {
             setIsLoading(true);
-            if (tempNewPassword && tempConfirmPassword !== tempNewPassword) {
+            setErrorMessage("")
+            
+            // Retrieve the user ID from AsyncStorage
+            const userId = await AsyncStorage.getItem('spotifyUserId');
+    
+            if (!userId) {
+                setErrorMessage("User ID not found.");
+                return;
+            }
+    
+            // Check if new password matches the confirmation password
+            if (tempNewPassword && tempNewPassword !== tempConfirmPassword) {
                 setErrorMessage('Passwords do not match.');
                 return;
             }
-
+    
+            // Update display name if it has changed
             if (tempDisplayName !== displayName) {
                 await updateDisplayName(userId, displayName);
                 setDisplayName(displayName);
             }
+    
+            // Update profile picture if it has changed
             if (tempProfilePic !== profilePic) {
                 await updateProfilePicture(userId, profilePic);
                 setProfilePic(profilePic);
             }
+    
+            // Update password if it has changed
             if (tempNewPassword) {
-                await updatePassword(newPassword);
+                await updatePassword(userId, newPassword); // Pass userId
             }
-
+    
             setSuccessMessage('All changes saved.');
+            
+            // Close the edit profile popup after a short delay
             setTimeout(() => setShowEditProfilePopup(false), 2000);
+    
         } catch (error) {
             console.error('Error updating profile:', error);
             setErrorMessage('Failed to update profile.');
         } finally {
-            setIsLoading(false);
+            setIsLoading(false); // Reset loading state
         }
     };
+    
 
     const handleSignOut = async () => {
         try {
@@ -194,29 +241,13 @@ export default function Settings({ navigation }) {
         }
     };
 
-    const syncGhostModeState = async () => {
-        try {
-            const isGhostMode = await AsyncStorage.getItem('userData');
-            const userData = isGhostMode ? JSON.parse(isGhostMode) : {};
-            if (userData.isGhostMode !== undefined) {
-                await toggleGhostMode(userData.isGhostMode);
-            }
-        } catch (error) {
-            console.error('Error syncing Ghost Mode state:', error.message);
-        }
-    };
-
-    useEffect(() => {
-        syncGhostModeState();
-    }, []);
-
     useEffect(() => {
         const fetchUserInfo = async () => {
             try {
                 setIsLoading(true);
                 const userId = await AsyncStorage.getItem('spotifyUserId');
                 const userProfile = await fetchUserProfile(userId);
-                setDisplayName(userProfile.username || 'Guest');
+                setDisplayName(userProfile.username || 'Unknown User');
                 setProfilePic(userProfile.profilePic || '');
             } catch (error) {
                 console.error('Error fetching user info:', error.message);
@@ -288,10 +319,10 @@ export default function Settings({ navigation }) {
                         </View>
                     </View>
                     <Switch
-                        value={isMapView}
-                        onValueChange={toggleView}
+                        value={isGridViewEnabled}
+                        onValueChange={handleToggleGridView}
                         trackColor={{ false: '#767577', true: '#EAC255' }}
-                        thumbColor={isMapView ? '#93CE89' : '#EAC255'}
+                        thumbColor={isGridViewEnabled ? '#93CE89' : '#EAC255'}
                     />
                 </View>
                 <TouchableOpacity
@@ -362,59 +393,59 @@ export default function Settings({ navigation }) {
 
             {/* Edit Profile Modal */}
             <Modal
-                visible={showEditProfilePopup}
-                transparent={true}
-                animationType="slide"
-                onRequestClose={() => setShowEditProfilePopup(false)}
-            >
-                <View style={styles.editModalContainer}>
-                    <View style={styles.editModalContent}>
-                        <Text style={styles.modalTitle}>Edit Profile</Text>
+    visible={showEditProfilePopup}
+    transparent={true}
+    animationType="slide"
+    onRequestClose={() => setShowEditProfilePopup(false)}
+>
+    <View style={styles.editModalContainer}>
+        <View style={styles.editModalContent}>
+            <Text style={styles.modalTitle}>Edit Profile</Text>
 
-                        {/* Display Name */}
-                        <Text style={styles.label}>Enter New Display Name</Text>
-                        <TextInput
-                            style={styles.input}
-                            placeholder="New Display Name"
-                            value={displayName}
-                            onChangeText={setDisplayName}
-                        />
+            {/* Display Name */}
+            <Text style={styles.label}>Enter New Display Name</Text>
+            <TextInput
+                style={styles.input}
+                placeholder="New Display Name"
+                value={tempDisplayName}
+                onChangeText={setTempDisplayName}  // Store value in the state
+            />
 
-                        {/* Profile Picture */}
-                        <Text style={styles.label}>Upload New Profile Picture</Text>
-                        {profilePic ? (
-                            <Image source={{ uri: profilePic }} style={styles.profilePic} />
-                        ) : (
-                            <View style={styles.profilePicPlaceholder}>
-                                <Text style={styles.profilePicPlaceholderText}>No Profile Pic</Text>
-                            </View>
-                        )}
-                        <TouchableOpacity style={styles.uploadButton} onPress={handleChangeProfilePic}>
-                            <Text style={styles.uploadButtonText}>Select Profile Picture</Text>
-                        </TouchableOpacity>
+            {/* Profile Picture */}
+            <Text style={styles.label}>Upload New Profile Picture</Text>
+            {tempProfilePic ? (
+                <Image source={{ uri: tempProfilePic }} style={styles.profilePic} />
+            ) : (
+                <View style={styles.profilePicPlaceholder}>
+                    <Text style={styles.profilePicPlaceholderText}>No Profile Pic</Text>
+                </View>
+            )}
+            <TouchableOpacity style={styles.uploadButton} onPress={handleChangeProfilePic}>
+                <Text style={styles.uploadButtonText}>Select Profile Picture</Text>
+            </TouchableOpacity>
 
-                        {/* New Password */}
-                        <Text style={styles.label}>Enter New Password</Text>
-                        <TextInput
-                            style={styles.input}
-                            placeholder="New Password"
-                            secureTextEntry
-                            value={newPassword}
-                            onChangeText={setNewPassword}
-                        />
-                        <Text style={styles.passwordRequirements}>
-                            Password must be at least 8 characters long, include one uppercase letter, and one number.
-                        </Text>
+            {/* New Password */}
+            <Text style={styles.label}>Enter New Password</Text>
+            <TextInput
+                style={styles.input}
+                placeholder="New Password"
+                secureTextEntry
+                value={tempNewPassword}
+                onChangeText={setTempNewPassword}  // Store value in the state
+            />
+            <Text style={styles.passwordRequirements}>
+                Password must be at least 8 characters long, include one uppercase letter, and one number.
+            </Text>
 
-                        {/* Confirm Password */}
-                        <Text style={styles.label}>Confirm Password</Text>
-                        <TextInput
-                            style={styles.input}
-                            placeholder="Confirm Password"
-                            secureTextEntry
-                            value={confirmPassword}
-                            onChangeText={setConfirmPassword}
-                        />
+            {/* Confirm Password */}
+            <Text style={styles.label}>Confirm Password</Text>
+            <TextInput
+                style={styles.input}
+                placeholder="Confirm Password"
+                secureTextEntry
+                value={tempConfirmPassword}
+                onChangeText={setTempConfirmPassword}  // Store value in the state
+            />
 
                         {/* Buttons */}
                         {/* Display Success Message */}

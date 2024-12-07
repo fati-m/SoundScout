@@ -3,7 +3,7 @@ import { View, Text, Image, StyleSheet, TouchableOpacity, FlatList, Dimensions, 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuthRequest, makeRedirectUri } from 'expo-auth-session';
 import { handleAuthCallback, getUserProfile } from './utils/spotify';
-import { checkExistingAccountBySpotifyId, fetchUserProfile } from './utils/backendUtils';
+import { checkExistingAccountBySpotifyId, fetchUserProfile, isGridView } from './utils/backendUtils';
 import SpotifyLogo from '../assets/2024-spotify-logo-icon/Primary_Logo_White_CMYK.svg';
 
 export default function LoginScreen({ navigation }) {
@@ -57,7 +57,13 @@ export default function LoginScreen({ navigation }) {
             const userData = await fetchUserProfile(userProfile.id);
             await AsyncStorage.setItem('userData', JSON.stringify(userData));
 
-            navigation.navigate('Map');
+            const gridViewEnabled = await isGridView();
+
+            if (gridViewEnabled) {
+              navigation.navigate('Grid');
+            } else {
+              navigation.navigate('Map');
+            }
           } else {
             navigation.navigate('SignUp', { userProfile });
           }

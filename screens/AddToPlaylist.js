@@ -57,7 +57,14 @@ export default function AddToPlaylist({ navigation, route }) {
                 throw new Error(`Failed to add song to playlist: ${await response.text()}`);
             }
 
-            navigation.navigate('Map', {
+            // handling where to return the user based on gridView preference
+            const isGridView = await AsyncStorage.getItem('userData');
+            const userData = isGridView ? JSON.parse(isGridView) : {};
+            console.log('Verification of the user\'s isGridView status: ', userData.isGridView)
+            
+            let screen = userData.isGridView ? 'Grid' : 'Map';
+
+            navigation.navigate(screen, {
                 successMessage: 'The song you selected was added to your playlist of choice.',
             });
         } catch (error) {

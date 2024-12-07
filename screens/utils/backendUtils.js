@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { db, storage } from './firebaseConfig';
-import { doc, setDoc, getDoc, updateDoc, deleteDoc } from "firebase/firestore";
+import { db, getStorage, storage } from './firebaseConfig';
+import { doc, setDoc, getDoc, updateDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
 import * as Crypto from 'expo-crypto';
 import bcrypt from 'react-native-bcrypt';
 import { getCurrentlyPlaying } from './spotify';
@@ -9,6 +9,9 @@ import * as FileSystem from 'expo-file-system';
 import * as Location from 'expo-location';
 import { initializeApp } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
+import { getAuth, updatePassword as firebaseUpdatePassword, } from 'firebase/auth';
+
+
 
 bcrypt.setRandomFallback((len) => {
   const randomBytes = Crypto.getRandomBytes(len);
@@ -208,18 +211,6 @@ export const deleteAccount = async (id, clearLocalStorage = true) => {
     // Delete the document
     await deleteDoc(userDocRef);
 
-    // Optionally clear AsyncStorage
-    //if (clearLocalStorage) {
-      //try {
-       // await AsyncStorage.clear();
-      //} catch (storageError) {
-       // return {
-        //  success: true,
-        //  message: "Account deleted, but local storage clearing encountered issues.",
-       // };
-     // }
-    //}
-
     // Return success if everything was successful
     return { success: true, message: "Account deleted successfully." };
 
@@ -236,23 +227,47 @@ export const deleteAccount = async (id, clearLocalStorage = true) => {
 };
 
 
-/**
- * Updates a user's display name.
- * @param {string} userId - The SoundScout user ID.
- * @param {string} newDisplayName - The new display name for the user.
- * @returns {Promise<void>} - Resolves when the update is successful.
- */
 export const updateDisplayName = async (userId, newDisplayName) => {
   try {
-    // Reference to the user's document in Firestore
-    const userDocRef = doc(db, 'users', userId); 
+    // Step 1: Validate that both `userId` and `newDisplayName` are provided
+    if (!userId || !newDisplayName) {
+      throw new Error('User ID and new display name are required.');
+    }
 
-    // Update the display name in Firestore
-    await updateDoc(userDocRef, {
+    // Step 2: Reference to user document
+    const userDocRef = doc(db, 'users', userId);
+
+    // Diagnostic logging to check the current document
+    const userDoc = await getDoc(userDocRef);
+    console.log('Current User Document:', userDoc.exists() ? userDoc.data() : 'Document does not exist');
+
+    // Step 3: Update the document 
+    // Try multiple possible field names
+    await updateDoc(userDocRef, { 
       username: newDisplayName,
+      displayName: newDisplayName,
+      name: newDisplayName
     });
 
-    return true; 
+    // Step 4: Update the cached user data in `AsyncStorage`
+    const cachedData = await AsyncStorage.getItem('userData');
+    if (cachedData) {
+      const parsedData = JSON.parse(cachedData);
+      const updatedData = { 
+        ...parsedData, 
+        username: newDisplayName,
+        displayName: newDisplayName,
+        name: newDisplayName 
+      };
+      await AsyncStorage.setItem('userData', JSON.stringify(updatedData));
+    }
+
+    // Step 5: Verify the update
+    const updatedDoc = await getDoc(userDocRef);
+    console.log('Updated User Document:', updatedDoc.data());
+
+    console.log(`Display name updated successfully for user ID: ${userId}`);
+    return true;
   } catch (error) {
     console.error('Error updating display name:', error.message);
     return false; 
@@ -282,23 +297,37 @@ export const updateProfilePicture = async (userId, newProfilePic) => {
   }
 };
 
-/**
- * Updates a user's password.
- * @param {string} userId - The SoundScout user ID.
- * @param {string} newPassword - The new password for the user.
- * @returns {Promise<void>} - Resolves when the update is successful.
- */
-export const updatePassword = async (userId, newPassword) => {
-  // Step 1: Validate that both `userId` and `newPassword` are provided. Throw an error if either is missing.
 
-  // Step 2: Generate a new hashed password using `bcrypt`.
+// Updates a user's password
+export const updatePassword = async (id, newPassword) => {
+  try {
+    if (!id || !newPassword) {
+      throw new Error("User ID and new password are required.");
+    }
 
-  // Step 3: Use Firestore's `updateDoc` method to update the `password` field for the specified `userId`.
+    const salt = bcrypt.genSaltSync(10);
+    const hashedPassword = bcrypt.hashSync(newPassword, salt);
 
-  // Step 4: Update the cached user data in `AsyncStorage` to ensure the updated password is reflected locally.
+    // Get Firestore instance
+    const db = getFirestore();
 
-  // Step 5: Log the success or any errors during the update process.
+    const userDocRef = doc(db, 'users', id);
+    await updateDoc(userDocRef, { password: hashedPassword });
+
+    const cachedData = JSON.parse(await AsyncStorage.getItem('userData'));
+    const updatedData = { ...cachedData, password: hashedPassword };
+    await AsyncStorage.setItem('userData', JSON.stringify(updatedData));
+
+    console.log("Password updated successfully.");
+    return true;
+  } catch (error) {
+    console.error("Error updating password:", error.message);
+    return false;
+  }
 };
+
+
+
 
 /**
  * Checks if Ghost Mode is enabled for the current user.
@@ -346,8 +375,69 @@ export const toggleGhostMode = async (enabled) => {
 
     console.log("Ghost Mode updated successfully.");
     return true;
+
   } catch (error) {
     console.error("Error toggling Ghost Mode:", error.message);
+    return false;
+  }
+};
+
+/**
+ * Checks if Grid View is enabled for the current user.
+ * @returns {Promise<boolean>} - Returns `true` if Grid View is enabled, `false` otherwise.
+ */
+export const isGridView = async () => {
+  try {
+    const cachedData = JSON.parse(await AsyncStorage.getItem('userData'));
+
+    if (cachedData?.isGridView !== undefined) {
+      return cachedData.isGridView;
+    }
+
+    const userId = await AsyncStorage.getItem('spotifyUserId');
+    const userDocRef = doc(db, 'users', userId);
+    const userDoc = await getDoc(userDocRef);
+
+    if (!userDoc.exists()) {
+      return false;
+    }
+
+    const firestoreData = userDoc.data();
+    return firestoreData?.isGridView ?? false;
+  } catch (error) {
+    console.error('Error checking for Grid View:', error.message);
+    throw error;
+  }
+};
+
+/**
+ * Toggles the user's Grid View setting.
+ * @param {boolean} enabled - Whether to enable or disable Grid View.
+ * @returns {Promise<boolean>} - Returns `true` if the update was successful, `false` otherwise.
+ */
+export const toggleGridView = async (enabled, {navigation}) => {
+  try {
+    const userId = await AsyncStorage.getItem('spotifyUserId');
+
+    const userDocRef = doc(db, 'users', userId);
+    await updateDoc(userDocRef, { isGridView: enabled });
+
+    const cachedData = JSON.parse(await AsyncStorage.getItem('userData'));
+    const updatedData = { ...cachedData, isGridView: enabled };
+    await AsyncStorage.setItem('userData', JSON.stringify(updatedData));
+
+    if (enabled) {
+      navigation.navigate('Grid')
+
+    } else {
+      navigation.navigate('Map')
+    }
+
+    console.log("Grid View updated successfully.");
+    return true;
+
+  } catch (error) {
+    console.error("Error toggling Grid View:", error.message);
     return false;
   }
 };

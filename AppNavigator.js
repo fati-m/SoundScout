@@ -9,6 +9,7 @@ import Settings from './screens/Settings';
 import Likes from './screens/Likes';
 import AddToPlaylist from './screens/AddToPlaylist';
 import Recommendations from './screens/Recommendations';
+import Grid from './screens/HomePageGrid';
 
 const Stack = createStackNavigator();
 
@@ -21,7 +22,15 @@ export default function AppNavigator() {
       try {
         const userId = await AsyncStorage.getItem('spotifyUserId');
         if (userId) {
-          setInitialRoute('Map');
+          const isGridView = await AsyncStorage.getItem('userData');
+          const userData = isGridView ? JSON.parse(isGridView) : {};
+          
+          if(userData.isGridView){
+            setInitialRoute('Grid')
+          } else {
+            setInitialRoute('Map');
+          }
+          
         } else {
           setInitialRoute('Entry');
         }
@@ -87,6 +96,12 @@ export default function AppNavigator() {
       <Stack.Screen
         name="Recommendations"
         component={Recommendations}
+        options={{ headerShown: false }}
+      />
+
+      <Stack.Screen
+        name="Grid"
+        component={Grid}
         options={{ headerShown: false }}
       />
 
