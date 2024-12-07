@@ -100,7 +100,6 @@ export default function Settings({ navigation }) {
             await deleteAccount(userId);
             await AsyncStorage.clear();
             setShowDeletePopup(false);
-
             navigation.navigate('Login');
         } catch (error) {
             console.error('Error deleting account:', error.message);
@@ -110,7 +109,6 @@ export default function Settings({ navigation }) {
         }
     };
     
-
     const handleChangeProfilePic = async () => {
         try {
             const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -183,35 +181,55 @@ export default function Settings({ navigation }) {
         }
     };
 
-    const saveProfileChanges = async () => {
+    const saveProfileChanges = async () => { 
         try {
             setIsLoading(true);
-            if (tempNewPassword && tempConfirmPassword !== tempNewPassword) {
+            setErrorMessage("")
+            
+            // Retrieve the user ID from AsyncStorage
+            const userId = await AsyncStorage.getItem('spotifyUserId');
+    
+            if (!userId) {
+                setErrorMessage("User ID not found.");
+                return;
+            }
+    
+            // Check if new password matches the confirmation password
+            if (tempNewPassword && tempNewPassword !== tempConfirmPassword) {
                 setErrorMessage('Passwords do not match.');
                 return;
             }
-
+    
+            // Update display name if it has changed
             if (tempDisplayName !== displayName) {
-                await updateDisplayName(tempDisplayName);
+                await updateDisplayName(userId, tempDisplayName); // Pass userId
                 setDisplayName(tempDisplayName);
             }
+    
+            // Update profile picture if it has changed
             if (tempProfilePic !== profilePic) {
-                await updateProfilePicture(tempProfilePic);
+                await updateProfilePicture(userId, tempProfilePic); // Pass userId
                 setProfilePic(tempProfilePic);
             }
+    
+            // Update password if it has changed
             if (tempNewPassword) {
-                await updatePassword(tempNewPassword);
+                await updatePassword(userId, tempNewPassword); // Pass userId
             }
-
+    
             setSuccessMessage('All changes saved.');
+            
+            // Close the edit profile popup after a short delay
             setTimeout(() => setShowEditProfilePopup(false), 2000);
+    
         } catch (error) {
             console.error('Error updating profile:', error);
             setErrorMessage('Failed to update profile.');
         } finally {
-            setIsLoading(false);
+            setIsLoading(false); // Reset loading state
         }
     };
+    
 
     const handleSignOut = async () => {
         try {
@@ -374,110 +392,121 @@ export default function Settings({ navigation }) {
 
             {/* Edit Profile Modal */}
             <Modal
-                visible={showEditProfilePopup}
-                transparent={true}
-                animationType="slide"
-                onRequestClose={() => setShowEditProfilePopup(false)}
-            >
-                <View style={styles.editModalContainer}>
-                    <View style={styles.editModalContent}>
-                        <Text style={styles.modalTitle}>Edit Profile</Text>
+    visible={showEditProfilePopup}
+    transparent={true}
+    animationType="slide"
+    onRequestClose={() => setShowEditProfilePopup(false)}
+>
+    <View style={styles.editModalContainer}>
+        <View style={styles.editModalContent}>
+            <Text style={styles.modalTitle}>Edit Profile</Text>
 
-                        {/* Display Name */}
-                        <Text style={styles.label}>Enter New Display Name</Text>
-                        <TextInput
-                            style={styles.input}
-                            placeholder="New Display Name"
-                            value={displayName}
-                            onChangeText={setDisplayName}
-                        />
+            {/* Display Name */}
+            <Text style={styles.label}>Enter New Display Name</Text>
+            <TextInput
+                style={styles.input}
+                placeholder="New Display Name"
+                value={tempDisplayName}
+                onChangeText={setTempDisplayName}  // Store value in the state
+            />
 
-                        {/* Profile Picture */}
-                        <Text style={styles.label}>Upload New Profile Picture</Text>
-                        {profilePic ? (
-                            <Image source={{ uri: profilePic }} style={styles.profilePic} />
-                        ) : (
-                            <View style={styles.profilePicPlaceholder}>
-                                <Text style={styles.profilePicPlaceholderText}>No Profile Pic</Text>
-                            </View>
-                        )}
-                        <TouchableOpacity style={styles.uploadButton} onPress={handleChangeProfilePic}>
-                            <Text style={styles.uploadButtonText}>Select Profile Picture</Text>
-                        </TouchableOpacity>
+            {/* Profile Picture */}
+            <Text style={styles.label}>Upload New Profile Picture</Text>
+            {tempProfilePic ? (
+                <Image source={{ uri: tempProfilePic }} style={styles.profilePic} />
+            ) : (
+                <View style={styles.profilePicPlaceholder}>
+                    <Text style={styles.profilePicPlaceholderText}>No Profile Pic</Text>
+                </View>
+            )}
+            <TouchableOpacity style={styles.uploadButton} onPress={handleChangeProfilePic}>
+                <Text style={styles.uploadButtonText}>Select Profile Picture</Text>
+            </TouchableOpacity>
 
-                        {/* New Password */}
-                        <Text style={styles.label}>Enter New Password</Text>
-                        <TextInput
-                            style={styles.input}
-                            placeholder="New Password"
-                            secureTextEntry
-                            value={newPassword}
-                            onChangeText={setNewPassword}
-                        />
-                        <Text style={styles.passwordRequirements}>
-                            Password must be at least 8 characters long, include one uppercase letter, and one number.
-                        </Text>
+            {/* New Password */}
+            <Text style={styles.label}>Enter New Password</Text>
+            <TextInput
+                style={styles.input}
+                placeholder="New Password"
+                secureTextEntry
+                value={tempNewPassword}
+                onChangeText={setTempNewPassword}  // Store value in the state
+            />
+            <Text style={styles.passwordRequirements}>
+                Password must be at least 8 characters long, include one uppercase letter, and one number.
+            </Text>
 
-                        {/* Confirm Password */}
-                        <Text style={styles.label}>Confirm Password</Text>
-                        <TextInput
-                            style={styles.input}
-                            placeholder="Confirm Password"
-                            secureTextEntry
-                            value={confirmPassword}
-                            onChangeText={setConfirmPassword}
-                        />
+            {/* Confirm Password */}
+            <Text style={styles.label}>Confirm Password</Text>
+            <TextInput
+                style={styles.input}
+                placeholder="Confirm Password"
+                secureTextEntry
+                value={tempConfirmPassword}
+                onChangeText={setTempConfirmPassword}  // Store value in the state
+            />
 
-                        {/* Buttons */}
-                        {/* Display Success Message */}
-                        {successMessage ? <Text style={styles.successMessage}>{successMessage}</Text> : null}
-                        {errorMessage ? <Text style={styles.errorMessage}>{errorMessage}</Text> : null}
-                        <View style={styles.modalButtons}>
-                            <TouchableOpacity
-                                style={styles.cancelButton}
-                                onPress={() => setShowEditProfilePopup(false)}
-                            >
-                                <Text style={styles.buttonText}>Cancel</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                style={styles.confirmButton}
-                                onPress={async () => {
-                                    if (tempNewPassword && tempConfirmPassword !== tempNewPassword) {
-                                        setErrorMessage('Passwords do not match.');
-                                        return;
-                                    }
-                                    if (
-                                        tempNewPassword &&
-                                        (tempNewPassword.length < 8 || !/[A-Z]/.test(tempNewPassword) || !/[0-9]/.test(tempNewPassword))
-                                    ) {
-                                        setErrorMessage(
-                                            'Password must be at least 8 characters long, include one uppercase letter, and one number.'
-                                        );
-                                        return;
-                                    }
+            {/* Buttons */}
+            {successMessage ? <Text style={styles.successMessage}>{successMessage}</Text> : null}
+            {errorMessage ? <Text style={styles.errorMessage}>{errorMessage}</Text> : null}
+            <View style={styles.modalButtons}>
+                <TouchableOpacity
+                    style={styles.cancelButton}
+                    onPress={() => setShowEditProfilePopup(false)}
+                >
+                    <Text style={styles.buttonText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                    style={styles.confirmButton}
+                    onPress={async () => {
+                        // Password validation
+                        if (tempNewPassword && tempConfirmPassword !== tempNewPassword) {
+                            setErrorMessage('Passwords do not match.');
+                            return;
+                        }
+                        if (
+                            tempNewPassword &&
+                            (tempNewPassword.length < 8 || !/[A-Z]/.test(tempNewPassword) || !/[0-9]/.test(tempNewPassword))
+                        ) {
+                            setErrorMessage('Password must be at least 8 characters long, include one uppercase letter, and one number.');
+                            return;
+                        }
 
-                                    setErrorMessage('');
+                        setErrorMessage('');
 
-                                    try {
-                                        if (tempDisplayName !== displayName) {
-                                            await updateDisplayName('12345', tempDisplayName);
-                                            setDisplayName(tempDisplayName);
-                                        }
-                                        if (tempProfilePic !== profilePic) {
-                                            await updateProfilePicture('12345', tempProfilePic);
-                                            setProfilePic(tempProfilePic);
-                                        }
-                                        if (tempNewPassword) {
-                                            await updatePassword('12345', tempNewPassword);
-                                        }
-                                        setSuccessMessage('All changes saved successfully.');
-                                        setTimeout(() => setShowEditProfilePopup(false), 2000);
-                                    } catch (error) {
-                                        console.error('Error updating profile:', error);
-                                        setErrorMessage('Failed to update profile. Please try again.');
-                                    }
-                                }}
-                            >
+                        try {
+                            const userId = await AsyncStorage.getItem('spotifyUserId');
+                            if (!userId) {
+                                setErrorMessage('User ID not found. Please log in again.');
+                                return;
+                            }
+
+                            // Update display name if changed
+                            if (tempDisplayName !== displayName) {
+                                await updateDisplayName(userId, tempDisplayName);
+                                setDisplayName(tempDisplayName);  // Update the state after successful change
+                            }
+
+                            // Update profile picture if changed
+                            if (tempProfilePic !== profilePic) {
+                                await updateProfilePicture(userId, tempProfilePic);
+                                setProfilePic(tempProfilePic);  // Update the state after successful change
+                            }
+
+                            // Update password if provided
+                            if (tempNewPassword) {
+                                await updatePassword(userId, tempNewPassword);
+                                setNewPassword(tempNewPassword);  // Update the state after password change
+                            }
+
+                            setSuccessMessage('All changes saved successfully.');
+                            setTimeout(() => setShowEditProfilePopup(false), 2000);  // Close modal after success
+                        } catch (error) {
+                            console.error('Error updating profile:', error);
+                            setErrorMessage('Failed to update profile. Please try again.');
+                        }
+                    }}
+                >
                                 <Text style={styles.buttonText}>Save</Text>
                             </TouchableOpacity>
                         </View>

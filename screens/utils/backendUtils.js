@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { db, storage } from './firebaseConfig';
+import { db, getStorage, storage } from './firebaseConfig';
 import { doc, setDoc, getDoc, updateDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
 import * as Crypto from 'expo-crypto';
 import bcrypt from 'react-native-bcrypt';
@@ -10,6 +10,8 @@ import * as Location from 'expo-location';
 import { initializeApp } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
 import { getAuth, updatePassword as firebaseUpdatePassword, } from 'firebase/auth';
+
+
 
 bcrypt.setRandomFallback((len) => {
   const randomBytes = Crypto.getRandomBytes(len);
@@ -225,35 +227,59 @@ export const deleteAccount = async (id, clearLocalStorage = true) => {
 };
 
 
-/**
- * Updates a user's display name.
- * @param {string} userId - The SoundScout user ID.
- * @param {string} newDisplayName - The new display name for the user.
- * @returns {Promise<void>} - Resolves when the update is successful.
- */
 export const updateDisplayName = async (userId, newDisplayName) => {
   try {
-    // Reference to the user's document in Firestore
-    const userDocRef = doc(db, 'users', userId); 
+    // Step 1: Validate that both `userId` and `newDisplayName` are provided
+    if (!userId || !newDisplayName) {
+      throw new Error('User ID and new display name are required.');
+    }
 
-    // Update the display name in Firestore
-    await updateDoc(userDocRef, {
+    // Step 2: Reference to user document
+    const userDocRef = doc(db, 'users', userId);
+
+    // Diagnostic logging to check the current document
+    const userDoc = await getDoc(userDocRef);
+    console.log('Current User Document:', userDoc.exists() ? userDoc.data() : 'Document does not exist');
+
+    // Step 3: Update the document 
+    // Try multiple possible field names
+    await updateDoc(userDocRef, { 
       username: newDisplayName,
+      displayName: newDisplayName,
+      name: newDisplayName
     });
 
-    return true; 
+    // Step 4: Update the cached user data in `AsyncStorage`
+    const cachedData = await AsyncStorage.getItem('userData');
+    if (cachedData) {
+      const parsedData = JSON.parse(cachedData);
+      const updatedData = { 
+        ...parsedData, 
+        username: newDisplayName,
+        displayName: newDisplayName,
+        name: newDisplayName 
+      };
+      await AsyncStorage.setItem('userData', JSON.stringify(updatedData));
+    }
+
+    // Step 5: Verify the update
+    const updatedDoc = await getDoc(userDocRef);
+    console.log('Updated User Document:', updatedDoc.data());
+
+    console.log(`Display name updated successfully for user ID: ${userId}`);
+    return true;
   } catch (error) {
-    console.error('Error updating display name:', error.message);
-    return false; 
+    console.error(`Error updating display name for user ID: ${userId}:`, error);
+    
+    // More detailed error logging
+    if (error.code === 'not-found') {
+      console.error('User document not found in Firestore');
+    }
+    
+    throw error;
   }
 };
 
-/**
- * Updates a user's profile picture.
- * @param {string} userId - The SoundScout user ID.
- * @param {string} profilePicUri - The local URI or URL of the new profile picture.
- * @returns {Promise<void>} - Resolves when the update is successful.
- */
 export const updateProfilePicture = async (userId, profilePicUri) => {
   // Step 1: Validate that both `userId` and `profilePicUri` are provided. Throw an error if either is missing.
 
@@ -271,24 +297,35 @@ export const updateProfilePicture = async (userId, profilePicUri) => {
 };
 
 
+// Updates a user's password
+export const updatePassword = async (id, newPassword) => {
+  try {
+    if (!id || !newPassword) {
+      throw new Error("User ID and new password are required.");
+    }
 
-/**
- * Updates a user's password.
- * @param {string} userId - The SoundScout user ID.
- * @param {string} newPassword - The new password for the user.
- * @returns {Promise<void>} - Resolves when the update is successful.
- */
-export const updatePassword = async (userId, newPassword) => {
-  // Step 1: Validate that both `userId` and `newPassword` are provided. Throw an error if either is missing.
+    const salt = bcrypt.genSaltSync(10);
+    const hashedPassword = bcrypt.hashSync(newPassword, salt);
 
-  // Step 2: Generate a new hashed password using `bcrypt`.
+    // Get Firestore instance
+    const db = getFirestore();
 
-  // Step 3: Use Firestore's `updateDoc` method to update the `password` field for the specified `userId`.
+    const userDocRef = doc(db, 'users', id);
+    await updateDoc(userDocRef, { password: hashedPassword });
 
-  // Step 4: Update the cached user data in `AsyncStorage` to ensure the updated password is reflected locally.
+    const cachedData = JSON.parse(await AsyncStorage.getItem('userData'));
+    const updatedData = { ...cachedData, password: hashedPassword };
+    await AsyncStorage.setItem('userData', JSON.stringify(updatedData));
 
-  // Step 5: Log the success or any errors during the update process.
+    console.log("Password updated successfully.");
+    return true;
+  } catch (error) {
+    console.error("Error updating password:", error.message);
+    return false;
+  }
 };
+
+
 
 
 /**
