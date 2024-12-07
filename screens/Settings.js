@@ -16,7 +16,6 @@ import {
     isGhostMode,
     toggleGhostMode
 } from './utils/backendUtils';
-
 import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -78,6 +77,7 @@ export default function Settings({ navigation }) {
                 setErrorMessage("Please enter your password to confirm.");
                 return;
             }
+
             const isValid = await validatePassword(userId, password);
             if (!isValid) {
                 setErrorMessage("Incorrect password. Please try again.");
@@ -94,11 +94,8 @@ export default function Settings({ navigation }) {
             setErrorMessage('Failed to delete account. Please try again.');
         } finally {
             setIsLoading(false);
-            setShowDeletePopup(false);
-            navigation.navigate("Login");
         }
     };
-    
 
     const handleChangeProfilePic = async () => {
         try {
@@ -158,6 +155,7 @@ export default function Settings({ navigation }) {
     };
 
     const saveProfileChanges = async () => {
+        const userId = await AsyncStorage.getItem('spotifyUserId');
         try {
             setIsLoading(true);
             if (tempNewPassword && tempConfirmPassword !== tempNewPassword) {
@@ -166,15 +164,15 @@ export default function Settings({ navigation }) {
             }
 
             if (tempDisplayName !== displayName) {
-                await updateDisplayName(tempDisplayName);
-                setDisplayName(tempDisplayName);
+                await updateDisplayName(userId, displayName);
+                setDisplayName(displayName);
             }
             if (tempProfilePic !== profilePic) {
-                await updateProfilePicture(tempProfilePic);
-                setProfilePic(tempProfilePic);
+                await updateProfilePicture(userId, profilePic);
+                setProfilePic(profilePic);
             }
             if (tempNewPassword) {
-                await updatePassword(tempNewPassword);
+                await updatePassword(newPassword);
             }
 
             setSuccessMessage('All changes saved.');
@@ -431,42 +429,7 @@ export default function Settings({ navigation }) {
                             </TouchableOpacity>
                             <TouchableOpacity
                                 style={styles.confirmButton}
-                                onPress={async () => {
-                                    if (tempNewPassword && tempConfirmPassword !== tempNewPassword) {
-                                        setErrorMessage('Passwords do not match.');
-                                        return;
-                                    }
-                                    if (
-                                        tempNewPassword &&
-                                        (tempNewPassword.length < 8 || !/[A-Z]/.test(tempNewPassword) || !/[0-9]/.test(tempNewPassword))
-                                    ) {
-                                        setErrorMessage(
-                                            'Password must be at least 8 characters long, include one uppercase letter, and one number.'
-                                        );
-                                        return;
-                                    }
-
-                                    setErrorMessage('');
-
-                                    try {
-                                        if (tempDisplayName !== displayName) {
-                                            await updateDisplayName('12345', tempDisplayName);
-                                            setDisplayName(tempDisplayName);
-                                        }
-                                        if (tempProfilePic !== profilePic) {
-                                            await updateProfilePicture('12345', tempProfilePic);
-                                            setProfilePic(tempProfilePic);
-                                        }
-                                        if (tempNewPassword) {
-                                            await updatePassword('12345', tempNewPassword);
-                                        }
-                                        setSuccessMessage('All changes saved successfully.');
-                                        setTimeout(() => setShowEditProfilePopup(false), 2000);
-                                    } catch (error) {
-                                        console.error('Error updating profile:', error);
-                                        setErrorMessage('Failed to update profile. Please try again.');
-                                    }
-                                }}
+                                onPress={saveProfileChanges}
                             >
                                 <Text style={styles.buttonText}>Save</Text>
                             </TouchableOpacity>
