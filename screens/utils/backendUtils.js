@@ -265,20 +265,21 @@ export const updateDisplayName = async (userId, newDisplayName) => {
  * @param {string} profilePicUri - The local URI or URL of the new profile picture.
  * @returns {Promise<void>} - Resolves when the update is successful.
  */
-export const updateProfilePicture = async (userId, profilePicUri) => {
-  // Step 1: Validate that both `userId` and `profilePicUri` are provided. Throw an error if either is missing.
+export const updateProfilePicture = async (userId, newProfilePic) => {
+  try {
+    // Reference to the user's document in Firestore
+    const userDocRef = doc(db, 'users', userId); 
 
-  // Step 2: Check if the file at `profilePicUri` exists locally. Throw an error if it does not.
+    // Update the display name in Firestore
+    await updateDoc(userDocRef, {
+      profilePic: newProfilePic,
+    });
 
-  // Step 3: Upload the file to Firebase Storage under a unique name associated with the user.
-
-  // Step 4: Retrieve the file's download URL from Firebase Storage after upload.
-
-  // Step 5: Use Firestore's `updateDoc` method to update the `profilePic` field for the specified `userId`.
-
-  // Step 6: Update the cached user data in `AsyncStorage` to reflect the new profile picture.
-
-  // Step 7: Log the success or any errors during the update process.
+    return true; 
+  } catch (error) {
+    console.error('Error updating profile picture:', error.message);
+    return false; 
+  }
 };
 
 /**
