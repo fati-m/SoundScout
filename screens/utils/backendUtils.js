@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage } from './firebaseConfig';
-import { doc, setDoc, getDoc, updateDoc, deleteDoc } from "firebase/firestore";
+import { doc, setDoc, getDoc, updateDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
 import * as Crypto from 'expo-crypto';
 import bcrypt from 'react-native-bcrypt';
 import { getCurrentlyPlaying } from './spotify';
@@ -9,6 +9,7 @@ import * as FileSystem from 'expo-file-system';
 import * as Location from 'expo-location';
 import { initializeApp } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
+import { getAuth, updatePassword as firebaseUpdatePassword, } from 'firebase/auth';
 
 bcrypt.setRandomFallback((len) => {
   const randomBytes = Crypto.getRandomBytes(len);
@@ -208,18 +209,6 @@ export const deleteAccount = async (id, clearLocalStorage = true) => {
     // Delete the document
     await deleteDoc(userDocRef);
 
-    // Optionally clear AsyncStorage
-    //if (clearLocalStorage) {
-      //try {
-       // await AsyncStorage.clear();
-      //} catch (storageError) {
-       // return {
-        //  success: true,
-        //  message: "Account deleted, but local storage clearing encountered issues.",
-       // };
-     // }
-    //}
-
     // Return success if everything was successful
     return { success: true, message: "Account deleted successfully." };
 
@@ -292,6 +281,8 @@ export const updateProfilePicture = async (userId, profilePicUri) => {
   // Step 7: Log the success or any errors during the update process.
 };
 
+
+
 /**
  * Updates a user's password.
  * @param {string} userId - The SoundScout user ID.
@@ -309,6 +300,7 @@ export const updatePassword = async (userId, newPassword) => {
 
   // Step 5: Log the success or any errors during the update process.
 };
+
 
 /**
  * Checks if Ghost Mode is enabled for the current user.

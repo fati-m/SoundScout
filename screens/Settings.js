@@ -94,8 +94,6 @@ export default function Settings({ navigation }) {
             setErrorMessage('Failed to delete account. Please try again.');
         } finally {
             setIsLoading(false);
-            setShowDeletePopup(false);
-            navigation.navigate("Login");
         }
     };
     
