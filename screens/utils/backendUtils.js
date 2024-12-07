@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, getStorage, storage } from './firebaseConfig';
-import { doc, setDoc, getDoc, updateDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
+import { doc, setDoc, getDoc, getDocs, updateDoc, deleteDoc, serverTimestamp, collection, query, where } from "firebase/firestore";
 import * as Crypto from 'expo-crypto';
 import bcrypt from 'react-native-bcrypt';
 import { getCurrentlyPlaying } from './spotify';
@@ -10,7 +10,6 @@ import * as Location from 'expo-location';
 import { initializeApp } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
 import { getAuth, updatePassword as firebaseUpdatePassword, } from 'firebase/auth';
-
 
 
 bcrypt.setRandomFallback((len) => {
@@ -172,6 +171,50 @@ export const fetchUserProfile = async (userId) => {
 };
 
 /**
+ * Fetches all users from Firestore who have Ghost Mode disabled.
+ * @returns {Promise<Object[]>} - A list of user profiles with Ghost Mode disabled.
+ */
+export const fetchNearbyUsers = async () => {
+  try {
+    // Reference to the 'users' collection in Firestore
+    const usersCollection = collection(db, 'users');
+
+    // Query for users with Ghost Mode disabled
+    const q = query(usersCollection, where('isGhostMode', '==', false));
+    const querySnapshot = await getDocs(q);
+
+    // Parse the user data into a list of objects
+    const nearbyUsers = querySnapshot.docs.map((doc) => {
+      const userData = doc.data();
+
+      return {
+        userId: doc.id, // Include the document ID as the user ID
+        username: userData.username || 'Anonymous User',
+        profilePic: userData.profilePic || null,
+        location: {
+          latitude: userData.location?.latitude || 0,
+          longitude: userData.location?.longitude || 0,
+        },
+        currentlyPlaying: {
+          albumCover: userData.currentlyPlaying?.albumCover || null,
+          artistName: userData.currentlyPlaying?.artistName || 'Unknown Artist',
+          trackName: userData.currentlyPlaying?.trackName || 'No track playing',
+          uri: userData.currentlyPlaying?.uri || '',
+        },
+        isGridView: userData.isGridView ?? false,
+        likedSongs: userData.likedSongs || [],
+        lastUpdated: userData.lastUpdated || new Date().toISOString(),
+      };
+    });
+    console.log("Nearby users: ", nearbyUsers)
+    return nearbyUsers; // Return the list of nearby users
+  } catch (error) {
+    console.error('Error fetching nearby users:', error.message);
+    throw error;
+  }
+};
+
+/**
  * Signs the user out by clearing the session data in AsyncStorage.
  * @returns {Promise<void>} Resolves when the user is signed out successfully.
  */
@@ -188,7 +231,11 @@ export const signOut = async () => {
   }
 };
 
-
+/**
+ * Deletes a user's account from Firestore by their Spotify ID.
+ * @param {string} id - The Spotify ID of the user to delete.
+ * @returns {Promise<void>} - Resolves when the account is deleted successfully.
+ */
 export const deleteAccount = async (id, clearLocalStorage = true) => {
   try {
     // Input validation
@@ -226,48 +273,23 @@ export const deleteAccount = async (id, clearLocalStorage = true) => {
   }
 };
 
-
+/**
+ * Updates a user's display name.
+ * @param {string} userId - The SoundScout user ID.
+ * @param {string} newDisplayName - The new display name for the user.
+ * @returns {Promise<void>} - Resolves when the update is successful.
+ */
 export const updateDisplayName = async (userId, newDisplayName) => {
   try {
-    // Step 1: Validate that both `userId` and `newDisplayName` are provided
-    if (!userId || !newDisplayName) {
-      throw new Error('User ID and new display name are required.');
-    }
+    // Reference to the user's document in Firestore
+    const userDocRef = doc(db, 'users', userId); 
 
-    // Step 2: Reference to user document
-    const userDocRef = doc(db, 'users', userId);
-
-    // Diagnostic logging to check the current document
-    const userDoc = await getDoc(userDocRef);
-    console.log('Current User Document:', userDoc.exists() ? userDoc.data() : 'Document does not exist');
-
-    // Step 3: Update the document 
-    // Try multiple possible field names
-    await updateDoc(userDocRef, { 
+    // Update the display name in Firestore
+    await updateDoc(userDocRef, {
       username: newDisplayName,
-      displayName: newDisplayName,
-      name: newDisplayName
     });
 
-    // Step 4: Update the cached user data in `AsyncStorage`
-    const cachedData = await AsyncStorage.getItem('userData');
-    if (cachedData) {
-      const parsedData = JSON.parse(cachedData);
-      const updatedData = { 
-        ...parsedData, 
-        username: newDisplayName,
-        displayName: newDisplayName,
-        name: newDisplayName 
-      };
-      await AsyncStorage.setItem('userData', JSON.stringify(updatedData));
-    }
-
-    // Step 5: Verify the update
-    const updatedDoc = await getDoc(userDocRef);
-    console.log('Updated User Document:', updatedDoc.data());
-
-    console.log(`Display name updated successfully for user ID: ${userId}`);
-    return true;
+    return true; 
   } catch (error) {
     console.error('Error updating display name:', error.message);
     return false; 
@@ -285,7 +307,7 @@ export const updateProfilePicture = async (userId, newProfilePic) => {
     // Reference to the user's document in Firestore
     const userDocRef = doc(db, 'users', userId); 
 
-    // Update the display name in Firestore
+    // Update the profile picture in Firestore
     await updateDoc(userDocRef, {
       profilePic: newProfilePic,
     });
@@ -297,8 +319,12 @@ export const updateProfilePicture = async (userId, newProfilePic) => {
   }
 };
 
-
-// Updates a user's password
+/**
+ * Updates a user's password.
+ * @param {string} userId - The SoundScout user ID.
+ * @param {string} newPassword - The new password of a user.
+ * @returns {Promise<void>} - Resolves when the update is successful.
+ */
 export const updatePassword = async (id, newPassword) => {
   try {
     if (!id || !newPassword) {
@@ -325,9 +351,6 @@ export const updatePassword = async (id, newPassword) => {
     return false;
   }
 };
-
-
-
 
 /**
  * Checks if Ghost Mode is enabled for the current user.
@@ -501,29 +524,42 @@ export const updateUserActivity = async (userId, currentlyPlaying, location) => 
 };
 
 /**
- * Checks if a song is in the user's liked songs.
- * @param {string} userId - The user ID.
- * @param {string} songUri - The URI of the song to check.
- * @returns {Promise<boolean>} - Returns `true` if the song is liked, `false` otherwise.
- */
+* Checks if a song is in the user's liked songs.
+* @param {string} userId - The user ID.
+* @param {string} songUri - The URI of the song to check.
+* @returns {Promise<boolean>} - Returns `true` if the song is liked, `false` otherwise.
+*/
 export const isSongLiked = async (userId, songUri) => {
   try {
+    // Check cached data first
     const cachedUserDataString = await AsyncStorage.getItem('userData');
     const cachedUserData = cachedUserDataString ? JSON.parse(cachedUserDataString) : {};
-
-    if (cachedUserData.likedSongs && cachedUserData.likedSongs.includes(songUri)) {
-      return true;
+ 
+    if (cachedUserData.likedSongs && Array.isArray(cachedUserData.likedSongs)) {
+      // Check if any song in the cached liked songs matches the URI
+      const isLikedInCache = cachedUserData.likedSongs.some(song => song.uri === songUri);
+      if (isLikedInCache) return true;
     }
-
+ 
+    // Fetch from Firebase if not found in cache
     const userDocRef = doc(db, 'users', userId);
     const userDoc = await getDoc(userDocRef);
-
+ 
     if (!userDoc.exists()) {
       throw new Error(`User with ID ${userId} does not exist.`);
     }
-
+ 
     const userData = userDoc.data();
-    return (userData.likedSongs || []).includes(songUri);
+    const likedSongs = userData.likedSongs || [];
+ 
+    // Update cache with the latest liked songs
+    await AsyncStorage.setItem('userData', JSON.stringify({
+      ...cachedUserData,
+      likedSongs: likedSongs,
+    }));
+ 
+    // Check if any song in the Firebase liked songs matches the URI
+    return likedSongs.some(song => song.uri === songUri);
   } catch (error) {
     console.error('Error checking if song is liked:', error.message);
     return false;
