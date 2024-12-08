@@ -182,7 +182,6 @@ export default function Settings({ navigation }) {
     };
 
     const saveProfileChanges = async () => {
-        const userId = await AsyncStorage.getItem('spotifyUserId');
         try {
             setIsLoading(true);
             setErrorMessage("")
@@ -196,9 +195,20 @@ export default function Settings({ navigation }) {
             }
     
             // Check if new password matches the confirmation password
-            if (tempNewPassword && tempNewPassword !== tempConfirmPassword) {
+            if (tempNewPassword && newPassword !== confirmPassword) {
                 setErrorMessage('Passwords do not match.');
                 return;
+            } if (
+                tempNewPassword &&
+                (tempNewPassword.length < 8 || !/[A-Z]/.test(tempNewPassword) || !/[0-9]/.test(tempNewPassword))
+            ) {
+                setErrorMessage(
+                    'Password must be at least 8 characters long, include one uppercase letter, and one number.'
+                );
+                return;
+            } // Update password if it has changed
+            if (tempNewPassword != newPassword) {
+                await updatePassword(userId, newPassword); 
             }
     
             // Update display name if it has changed
@@ -211,11 +221,6 @@ export default function Settings({ navigation }) {
             if (tempProfilePic !== profilePic) {
                 await updateProfilePicture(userId, profilePic);
                 setProfilePic(profilePic);
-            }
-    
-            // Update password if it has changed
-            if (tempNewPassword) {
-                await updatePassword(userId, newPassword); // Pass userId
             }
     
             setSuccessMessage('All changes saved.');
@@ -407,14 +412,14 @@ export default function Settings({ navigation }) {
             <TextInput
                 style={styles.input}
                 placeholder="New Display Name"
-                value={tempDisplayName}
-                onChangeText={setTempDisplayName}  // Store value in the state
+                value={displayName}
+                onChangeText={setDisplayName}  // Store value in the state
             />
 
             {/* Profile Picture */}
             <Text style={styles.label}>Upload New Profile Picture</Text>
-            {tempProfilePic ? (
-                <Image source={{ uri: tempProfilePic }} style={styles.profilePic} />
+            {profilePic ? (
+                <Image source={{ uri: profilePic }} style={styles.profilePic} />
             ) : (
                 <View style={styles.profilePicPlaceholder}>
                     <Text style={styles.profilePicPlaceholderText}>No Profile Pic</Text>
@@ -430,8 +435,8 @@ export default function Settings({ navigation }) {
                 style={styles.input}
                 placeholder="New Password"
                 secureTextEntry
-                value={tempNewPassword}
-                onChangeText={setTempNewPassword}  // Store value in the state
+                value={newPassword}
+                onChangeText={setNewPassword}  // Store value in the state
             />
             <Text style={styles.passwordRequirements}>
                 Password must be at least 8 characters long, include one uppercase letter, and one number.
@@ -443,8 +448,8 @@ export default function Settings({ navigation }) {
                 style={styles.input}
                 placeholder="Confirm Password"
                 secureTextEntry
-                value={tempConfirmPassword}
-                onChangeText={setTempConfirmPassword}  // Store value in the state
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}  // Store value in the state
             />
 
                         {/* Buttons */}
