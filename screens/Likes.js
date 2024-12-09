@@ -76,7 +76,6 @@ export default function Likes({ navigation, route }) {
             }
 
             const success = await removeSongFromLikes(userId, song.uri);
-
             if (success) {
                 const updatedSongs = likedSongs.filter((s) => s.uri !== song.uri);
                 setLikedSongs(updatedSongs);
@@ -90,6 +89,7 @@ export default function Likes({ navigation, route }) {
                 );
 
                 if (updateLikedSongsState) {
+                    console.log('Updating parent liked songs state...');
                     updateLikedSongsState([{ uri: song.uri, liked: false }]);
                 }
             }

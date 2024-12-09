@@ -147,7 +147,7 @@ export const fetchUserProfile = async (userId) => {
       profilePic: userData.profilePic || null,
       currentlyPlaying: {
         albumCover: userData.currentlyPlaying?.albumCover || null,
-        artistName: userData.currentlyPlaying?.artistName || 'Unknown Artist',
+        artistName: userData.currentlyPlaying?.artistName || '',
         trackName: userData.currentlyPlaying?.trackName || 'No track playing',
         uri: userData.currentlyPlaying?.uri || '',
       },
@@ -171,43 +171,29 @@ export const fetchUserProfile = async (userId) => {
 };
 
 /**
- * Fetches all users from Firestore who have Ghost Mode disabled.
+ * Fetches all users from Firestore who have Ghost Mode disabled and are not the specified user.
+ * @param {string} userId - The current user's ID to exclude from the results.
  * @returns {Promise<Object[]>} - A list of user profiles with Ghost Mode disabled.
  */
-export const fetchNearbyUsers = async () => {
+export const fetchNearbyUsers = async (userId) => {
   try {
-    // Reference to the 'users' collection in Firestore
-    const usersCollection = collection(db, 'users');
+    const usersCollectionRef = collection(db, 'users');
+    const usersQuery = query(
+      usersCollectionRef,
+      where('isGhostMode', '==', false)
+    );
+    const querySnapshot = await getDocs(usersQuery);
 
-    // Query for users with Ghost Mode disabled
-    const q = query(usersCollection, where('isGhostMode', '==', false));
-    const querySnapshot = await getDocs(q);
+    const nearbyUsers = querySnapshot.docs
+      .map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+      }))
+      .filter(user => user.id !== userId);
 
-    // Parse the user data into a list of objects
-    const nearbyUsers = querySnapshot.docs.map((doc) => {
-      const userData = doc.data();
+    await AsyncStorage.setItem('nearbyUsers', JSON.stringify(nearbyUsers));
 
-      return {
-        userId: doc.id, // Include the document ID as the user ID
-        username: userData.username || 'Anonymous User',
-        profilePic: userData.profilePic || null,
-        location: {
-          latitude: userData.location?.latitude || 0,
-          longitude: userData.location?.longitude || 0,
-        },
-        currentlyPlaying: {
-          albumCover: userData.currentlyPlaying?.albumCover || null,
-          artistName: userData.currentlyPlaying?.artistName || 'Unknown Artist',
-          trackName: userData.currentlyPlaying?.trackName || 'No track playing',
-          uri: userData.currentlyPlaying?.uri || '',
-        },
-        isGridView: userData.isGridView ?? false,
-        likedSongs: userData.likedSongs || [],
-        lastUpdated: userData.lastUpdated || new Date().toISOString(),
-      };
-    });
-    console.log("Nearby users: ", nearbyUsers)
-    return nearbyUsers; // Return the list of nearby users
+    return nearbyUsers;
   } catch (error) {
     console.error('Error fetching nearby users:', error.message);
     throw error;
@@ -282,17 +268,17 @@ export const deleteAccount = async (id, clearLocalStorage = true) => {
 export const updateDisplayName = async (userId, newDisplayName) => {
   try {
     // Reference to the user's document in Firestore
-    const userDocRef = doc(db, 'users', userId); 
+    const userDocRef = doc(db, 'users', userId);
 
     // Update the display name in Firestore
     await updateDoc(userDocRef, {
       username: newDisplayName,
     });
 
-    return true; 
+    return true;
   } catch (error) {
     console.error('Error updating display name:', error.message);
-    return false; 
+    return false;
   }
 };
 
@@ -305,17 +291,17 @@ export const updateDisplayName = async (userId, newDisplayName) => {
 export const updateProfilePicture = async (userId, newProfilePic) => {
   try {
     // Reference to the user's document in Firestore
-    const userDocRef = doc(db, 'users', userId); 
+    const userDocRef = doc(db, 'users', userId);
 
     // Update the profile picture in Firestore
     await updateDoc(userDocRef, {
       profilePic: newProfilePic,
     });
 
-    return true; 
+    return true;
   } catch (error) {
     console.error('Error updating profile picture:', error.message);
-    return false; 
+    return false;
   }
 };
 
@@ -438,7 +424,7 @@ export const isGridView = async () => {
  * @param {boolean} enabled - Whether to enable or disable Grid View.
  * @returns {Promise<boolean>} - Returns `true` if the update was successful, `false` otherwise.
  */
-export const toggleGridView = async (enabled, {navigation}) => {
+export const toggleGridView = async (enabled, { navigation }) => {
   try {
     const userId = await AsyncStorage.getItem('spotifyUserId');
 
@@ -531,34 +517,29 @@ export const updateUserActivity = async (userId, currentlyPlaying, location) => 
 */
 export const isSongLiked = async (userId, songUri) => {
   try {
-    // Check cached data first
     const cachedUserDataString = await AsyncStorage.getItem('userData');
     const cachedUserData = cachedUserDataString ? JSON.parse(cachedUserDataString) : {};
- 
+
     if (cachedUserData.likedSongs && Array.isArray(cachedUserData.likedSongs)) {
-      // Check if any song in the cached liked songs matches the URI
       const isLikedInCache = cachedUserData.likedSongs.some(song => song.uri === songUri);
       if (isLikedInCache) return true;
     }
- 
-    // Fetch from Firebase if not found in cache
+
     const userDocRef = doc(db, 'users', userId);
     const userDoc = await getDoc(userDocRef);
- 
+
     if (!userDoc.exists()) {
       throw new Error(`User with ID ${userId} does not exist.`);
     }
- 
+
     const userData = userDoc.data();
     const likedSongs = userData.likedSongs || [];
- 
-    // Update cache with the latest liked songs
+
     await AsyncStorage.setItem('userData', JSON.stringify({
       ...cachedUserData,
       likedSongs: likedSongs,
     }));
- 
-    // Check if any song in the Firebase liked songs matches the URI
+
     return likedSongs.some(song => song.uri === songUri);
   } catch (error) {
     console.error('Error checking if song is liked:', error.message);
