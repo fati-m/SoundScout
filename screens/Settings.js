@@ -195,7 +195,7 @@ export default function Settings({ navigation }) {
             }
     
             // Check if new password matches the confirmation password
-            if (newPassword !== confirmPassword) {
+            if (newPassword != confirmPassword) {
                 setErrorMessage('Passwords do not match.');
                 return;
             } if (
