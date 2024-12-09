@@ -10,6 +10,7 @@ import MenuIcon from '../assets/logo/menu.svg';
 import SettingsIcon from '../assets/logo/settings.svg';
 import {
     fetchUserProfile,
+    fetchNearbyUsers,
     syncUserDataPeriodically,
     isGhostMode,
     isSongLiked,
@@ -37,19 +38,48 @@ export default function Grid({ navigation, route }) {
     });
     const fadeAnim = useRef(new Animated.Value(1)).current;
     const [successMessage, setSuccessMessage] = useState(route.params?.successMessage || '');
-    const [nearbyProfiles, setNearbyProfiles] = useState([]);
-    const [distantProfiles, setDistantProfiles] = useState([]);
+    const [profiles, setUserProfiles] = useState([]);
 
-    const fetchProfiles = async () => {/*
-        This is a method that needs to be developed by back-end because it relies on other user profile access
-        which has not been implemented nor do I know how that implementation would look like. 
-        Im assuming it would be implemented similarly to fetching the liked songs in Likes.js but just profiles from firebase
-        */
-    }
+    const fetchProfiles = async () => {
+        try {
+            const userId = await AsyncStorage.getItem('spotifyUserId');
+            if (!userId) throw new Error("User ID not found in AsyncStorage.");
+
+            const nearbyUsers = await fetchNearbyUsers(userId);
+
+            setUserProfiles(nearbyUsers || []);
+            await syncLikedSongs(nearbyUsers);
+        } catch (error) {
+            console.error('Error fetching user profiles:', error.message);
+            Alert.alert('Error', 'Unable to fetch nearby users.');
+        }
+    };
 
     useEffect(() => {
         fetchProfiles();
     }, []);
+
+    const handleCloseOverlay = async () => {
+        setIsOverlayVisible(false);
+        await fetchProfiles();
+    };
+
+    const calculateDistanceInMiles = (lat1, lon1, lat2, lon2) => {
+        const toRadians = (degrees) => degrees * (Math.PI / 180);
+
+        const earthRadiusInMiles = 3958.8;
+        const dLat = toRadians(lat2 - lat1);
+        const dLon = toRadians(lon2 - lon1);
+
+        const a =
+            Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos(toRadians(lat1)) * Math.cos(toRadians(lat2)) *
+            Math.sin(dLon / 2) * Math.sin(dLon / 2);
+
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+        return earthRadiusInMiles * c;
+    };
 
     useEffect(() => {
         const initializeGrid = async () => {
@@ -87,6 +117,7 @@ export default function Grid({ navigation, route }) {
         syncInterval = setInterval(async () => {
             try {
                 await syncUserDataPeriodically(userId);
+                await fetchProfiles();
             } catch (error) {
                 console.error('Error syncing user data periodically:', error.message);
             }
@@ -128,14 +159,14 @@ export default function Grid({ navigation, route }) {
             try {
                 const userDataString = await AsyncStorage.getItem('userData');
                 const userData = userDataString ? JSON.parse(userDataString) : {};
-                setIsGhostModeEnabled(userData.isGhostMode || false);
-                // console.log("Ghost Mode state updated:", userData.isGhostMode);
+                setIsGhostModeEnabled((prev) => userData.isGhostMode ?? prev);
             } catch (error) {
                 console.error("Error syncing Ghost Mode state:", error.message);
             }
         };
 
-        const interval = setInterval(syncGhostModeState, 1000);
+        syncGhostModeState();
+        const interval = setInterval(syncGhostModeState, 10000);
         return () => clearInterval(interval);
     }, []);
 
@@ -166,120 +197,89 @@ export default function Grid({ navigation, route }) {
                 return;
             }
 
+            const updatedLikedSongs = { ...likedSongs }; // Create a copy of likedSongs
+
             if (isLiked) {
                 const success = await removeSongFromLikes(userId, song.uri);
-                if (success) setIsLiked(false);
+                if (success) {
+                    setIsLiked(false);
+                    delete updatedLikedSongs[song.uri]; // Remove the song from likedSongs
+                }
             } else {
                 const success = await addSongToLikes(userId, song);
-                if (success) setIsLiked(true);
+                if (success) {
+                    setIsLiked(true);
+                    updatedLikedSongs[song.uri] = true; // Add the song to likedSongs
+                }
             }
+
+            setLikedSongs(updatedLikedSongs); // Update the likedSongs state
         } catch (error) {
             console.error('Error toggling like status:', error.message);
         }
     };
 
     const handleLikeOtherUsersSongs = async (songId) => {
-        setLikedSongs((prevState) => ({
-            ...prevState,
-            [songId]: !prevState[songId],
-        }));
-
         try {
             const userId = await AsyncStorage.getItem('spotifyUserId');
-            const song = profileItems.find((item) => item.id === songId);
+            const song = profiles.find((item) => item.id === songId);
 
-            if (!song) {
-                Alert.alert('Error', 'Song not found.');
+            if (!song?.currentlyPlaying?.uri) {
+                Alert.alert('Error', 'Song not found or no track playing.');
                 return;
             }
 
-            const wasLiked = likedSongs[songId];
+            const updatedLikedSongs = { ...likedSongs };
+            const wasLiked = likedSongs[song.currentlyPlaying.uri];
 
             if (wasLiked) {
-                const success = await removeSongFromLikes(userId, song.uri);
-                if (!success) {
-                    throw new Error('Failed to remove song.');
-                }
+                const success = await removeSongFromLikes(userId, song.currentlyPlaying.uri);
+                if (!success) throw new Error('Failed to remove song.');
+                delete updatedLikedSongs[song.currentlyPlaying.uri];
             } else {
                 const success = await addSongToLikes(userId, song.currentlyPlaying);
-                if (!success) {
-                    throw new Error('Failed to add song.');
-                }
+                if (!success) throw new Error('Failed to add song.');
+                updatedLikedSongs[song.currentlyPlaying.uri] = true;
             }
+
+            setLikedSongs(updatedLikedSongs);
         } catch (error) {
             console.error('Error liking/unliking song:', error.message);
             Alert.alert('Error', 'Failed to update like status.');
-
-            setLikedSongs((prevState) => ({
-                ...prevState,
-                [songId]: likedSongs[songId],
-            }));
         }
     };
 
-    useFocusEffect(
-        React.useCallback(() => {
-            const refreshLikedSongs = async () => {
-                try {
-                    setIsLoading(true);
-
-                    const userId = await AsyncStorage.getItem('spotifyUserId');
-                    if (!userId) return;
-
-                    const updatedLikedSongs = {};
-
-                    for (const profile of profileItems) {
-                        const currentlyPlayingUri = profile.currentlyPlaying?.uri;
-                        if (currentlyPlayingUri) {
-                            const isLiked = await isSongLiked(userId, currentlyPlayingUri);
-                            updatedLikedSongs[profile.id] = isLiked;
-                        }
-                    }
-
-                    setLikedSongs(updatedLikedSongs);
-                } catch (error) {
-                    console.error('Error refreshing liked songs:', error.message);
-                } finally {
-                    setIsLoading(false);
+    const updateLikedSongsState = (updatedSongs) => {
+        setLikedSongs((prevState) => {
+            const newState = { ...prevState };
+            updatedSongs.forEach((song) => {
+                if (!song.liked) {
+                    delete newState[song.uri]; // Remove unliked songs
+                } else {
+                    newState[song.uri] = true; // Add liked songs
                 }
-            };
+            });
+            return newState;
+        });
+    };
 
-            if (profileItems.length > 0) {
-                refreshLikedSongs();
-            }
-        }, [profileItems])
-    );
+    const syncLikedSongs = async (profiles) => {
+        try {
+            const userId = await AsyncStorage.getItem('spotifyUserId');
+            const updatedLikedSongs = {};
 
-    useEffect(() => {
-        const updateLikedSongs = async () => {
-            if (!isOverlayVisible) {
-                try {
-                    setIsLoading(true);
-                    const userId = await AsyncStorage.getItem('spotifyUserId');
-                    if (!userId) return;
-
-                    const updatedLikedSongs = {};
-
-                    for (const profile of profileItems) {
-                        const currentlyPlayingUri = profile.currentlyPlaying?.uri;
-                        if (currentlyPlayingUri) {
-                            const isLiked = await isSongLiked(userId, currentlyPlayingUri);
-                            updatedLikedSongs[profile.id] = isLiked;
-                        }
-                    }
-
-                    setLikedSongs(updatedLikedSongs);
-                } catch (error) {
-                    console.error('Error updating liked songs:', error.message);
-                } finally {
-                    setIsLoading(false);
+            for (const profile of profiles) {
+                if (profile.currentlyPlaying?.uri) {
+                    const liked = await isSongLiked(userId, profile.currentlyPlaying.uri);
+                    updatedLikedSongs[profile.currentlyPlaying.uri] = liked;
                 }
             }
-        };
 
-        updateLikedSongs();
-    }, [isOverlayVisible, profileItems]);
-
+            setLikedSongs(updatedLikedSongs);
+        } catch (error) {
+            console.error('Error syncing liked songs:', error.message);
+        }
+    };
 
     useEffect(() => {
         const checkIfLiked = async () => {
@@ -305,73 +305,37 @@ export default function Grid({ navigation, route }) {
         }
     }, [successMessage]);
 
-    // TEMP STUFF BEGINS FOR FORMATTING HERE
-    // DATA USED FOR TESTING AND FORMATTING, WILL ACTUALLY COME FROM fetchProfiles() method developed by Backend
-    const profileItems = [
-        {
-            id: '1',
-            uri: 'spotify:track:52anJ914oylWdT3CytSMYF',
-            name: 'Malachi',
-            distance: '0.3 km away',
-            currentlyPlaying: {
-                trackName: 'the boy is mine (with Brandy, Monica) - Remix',
-                artistName: 'Ariana Grande, Brandy, Monica',
-                albumCover: 'https://i.scdn.co/image/ab67616d0000b273318479c9f214577c1e7077f6',
-                uri: 'spotify:track:52anJ914oylWdT3CytSMYF',
-            },
-            profile: 'https://i.scdn.co/image/ab6775700000ee853d6a7b4b8607dc892a8db8cb',
-        },
-        {
-            id: '2',
-            uri: 'spotify:track:4334LcrMqSUgCyzGwsBO7W',
-            name: 'John Smith',
-            distance: '0.7 km away',
-            currentlyPlaying: {
-                trackName: 'Star - Shelley FKA DRAM Remix',
-                artistName: 'Machinedrum, Tanerélle, DRAM, Mono/Poly',
-                albumCover: 'https://i.scdn.co/image/ab67616d0000b273ca486426cb307869ac787582',
-                uri: 'spotify:track:4334LcrMqSUgCyzGwsBO7W',
-            },
-            profile: 'https://static.wikia.nocookie.net/0db44c48-cbff-4729-b052-ad32b9fbabfe/scale-to-width/755',
-        },
-        {
-            id: '3',
-            uri: 'spotify:track:1H8BKN1WYV6AW1kghI3ldP',
-            name: 'Lemon Lime',
-            distance: '1 km away',
-            currentlyPlaying: {
-                trackName: 'Orlando',
-                artistName: 'Blood Orange',
-                albumCover: 'https://i.scdn.co/image/ab67616d0000b27347dd2ca47ec9bf14559e17c6',
-                uri: 'spotify:track:1H8BKN1WYV6AW1kghI3ldP',
-            },
-            profile: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSXx2xFk_wEb1hLQoDo4Ar3YbhosCPyOCfOgA&s',
-        },
-    ];
-
     const renderItem = ({ item }) => {
-        const isLiked = likedSongs[item.id];
+        const isSongAvailable = item.currentlyPlaying?.trackName &&
+            item.currentlyPlaying?.trackName !== "No track playing" &&
+            item.currentlyPlaying?.trackName !== "";
+        const isLiked = likedSongs[item.currentlyPlaying?.uri] || false;
+        const distanceInMiles = calculateDistanceInMiles(
+            currentRegion?.latitude || 0,
+            currentRegion?.longitude || 0,
+            item.location?.latitude || 0,
+            item.location?.longitude || 0
+        ).toFixed(2);
+
         return (
-            <View style={styles.carouselItem}>
+            <View style={styles.flatlistItem}>
                 <View style={styles.userSummary}>
-                    {item.profile ? (
+                    {item.profilePic ? (
                         <Image
-                            source={{ uri: item.profile }}
+                            source={{ uri: item.profilePic }}
                             style={styles.otherProfilePic}
                         />
                     ) : (
                         <ProfileIcon width={60} height={60} style={styles.otherProfilePic} />
                     )}
                     <View style={styles.userSummaryText}>
-                        <Text style={styles.otherUserName}>{item.name}</Text>
-                        <Text style={styles.otherUserDistance}>{item.distance}</Text>
+                        <Text style={styles.otherUserName}>{item.username || 'Unknown User'}</Text>
+                        <Text style={styles.otherUserDistance}>{distanceInMiles} miles away</Text>
                     </View>
                 </View>
-
                 <Text style={styles.otherCurrentlyListeningHeader}>Currently listening to...</Text>
-
                 <View style={styles.otherCurrentlyListeningSection}>
-                    {item.currentlyPlaying.albumCover ? (
+                    {item.currentlyPlaying?.albumCover ? (
                         <Image
                             source={{ uri: item.currentlyPlaying.albumCover }}
                             style={styles.otherCurrentlyListeningAlbumCover}
@@ -384,18 +348,19 @@ export default function Grid({ navigation, route }) {
                     )}
                     <View style={styles.otherCurrentlyListeningSectionText}>
                         <Text numberOfLines={2} style={styles.otherSongName}>
-                            {item.currentlyPlaying.trackName}
+                            {item.currentlyPlaying?.trackName || 'No track playing'}
                         </Text>
-                        <Text numberOfLines={2} style={styles.otherArtistName}>{item.currentlyPlaying.artistName}</Text>
+                        <Text numberOfLines={2} style={styles.otherArtistName}>
+                            {item.currentlyPlaying?.artistName || ''}
+                        </Text>
                     </View>
                 </View>
-
                 <View style={styles.songInteractions}>
-                    <TouchableOpacity style={[
-                        styles.likeSongBtn,
-                        !item.currentlyPlaying.trackName && { opacity: 0.5 },
-                    ]}
-                        onPress={() => handleLikeOtherUsersSongs(item.id)}>
+                    <TouchableOpacity
+                        style={[styles.likeSongBtn, !isSongAvailable && { opacity: 0.5 }]}
+                        onPress={() => handleLikeOtherUsersSongs(item.id)}
+                        disabled={!isSongAvailable}
+                    >
                         {isLiked ? (
                             <HeartIcon width={30} height={30} />
                         ) : (
@@ -403,20 +368,17 @@ export default function Grid({ navigation, route }) {
                         )}
                     </TouchableOpacity>
                     <TouchableOpacity
-                        style={[
-                            styles.addToPlaylistBtn,
-                            !item.currentlyPlaying.trackName && { opacity: 0.5 },
-                        ]}
+                        style={[styles.addToPlaylistBtn, !isSongAvailable && { opacity: 0.5 }]}
                         onPress={() =>
                             navigation.navigate('AddToPlaylist', { songInfo: item.currentlyPlaying })
                         }
+                        disabled={!isSongAvailable}
                     >
                         <PlusIcon width={30} height={30} />
                     </TouchableOpacity>
                 </View>
-
             </View>
-        )
+        );
     };
 
     return (
@@ -492,20 +454,8 @@ export default function Grid({ navigation, route }) {
                         <View style={styles.menuContent}>
                             <View style={styles.menuItemContainer}>
                                 <TouchableOpacity style={styles.menuItem} onPress={() =>
-                                    navigation.navigate('Likes', {
-                                        updateLikedSongsState: (updatedSongs) => {
-                                            setLikedSongs((prevState) => {
-                                                const newState = { ...prevState };
-                                                updatedSongs.forEach((song) => {
-                                                    newState[song.uri] = song.liked; // Update the like status
-                                                });
-                                                return newState;
-                                            });
-                                        }
-                                    })
-                                }>
+                                    navigation.navigate('Likes', { updateLikedSongsState })}>
                                     <HeartIcon width={50} height={50} />
-
                                 </TouchableOpacity>
                                 <Text style={styles.menuText}>Likes</Text>
                             </View>
@@ -518,14 +468,6 @@ export default function Grid({ navigation, route }) {
                                 <Text style={styles.menuText}>Settings</Text>
                             </View>
                             {/* Add additional menu items here */}
-                            {/* <View style={styles.menuItemContainer}> This should remain commented out and not deleted in case of Recommendation changes
-                                <TouchableOpacity
-                                    style={styles.menuItem}
-                                    onPress={() => navigation.navigate('Recommendations')}>
-                                    <RecommendIcon width={50} height={50} />
-                                </TouchableOpacity>
-                                <Text style={styles.menuText}>You'll Like</Text>
-                            </View> */}
                         </View>
                         <View style={styles.menuTitleContainer}>
                             <Text style={styles.menuTitle}>MAIN MENU</Text>
@@ -538,7 +480,7 @@ export default function Grid({ navigation, route }) {
                     <View style={styles.overlayContent}>
                         <TouchableOpacity
                             style={styles.closeOverlayBtn}
-                            onPress={() => { setIsOverlayVisible(false) }}
+                            onPress={handleCloseOverlay}
                         >
                             <CloseIcon width={20} height={20} />
                         </TouchableOpacity>
@@ -623,40 +565,19 @@ export default function Grid({ navigation, route }) {
                     </View>
                 </Animated.View>
             )}
-            <ScrollView contentContainerStyle={{ flexGrow: 1, flexDirection: 'column', gap: 20, marginVertical: 20, paddingBottom: 30, justifyContent: 'center', alignItems: 'center' }}>
-
-                <View style={styles.distanceHeader}>
-                    <Text
-                        style={styles.distanceHeaderText}
-                    >Near Me</Text>
+            {profiles && profiles.length > 0 ? (
+                <View style={styles.profilesFlatlist}>
+                    <FlatList
+                        data={profiles}
+                        renderItem={renderItem}
+                        keyExtractor={(item) => item.id}
+                        showsVerticalScrollIndicator={false}
+                        contentContainerStyle={{ paddingBottom: 20, gap: 20 }}
+                    />
                 </View>
-
-                <FlatList
-                    data={profileItems}
-                    renderItem={renderItem}
-                    keyExtractor={(item) => item.id}
-                    horizontal
-                    bounces={false}
-                    showsHorizontalScrollIndicator={false}
-                    showsVerticalScrollIndicator={false}
-                />
-
-                <View style={styles.distanceHeader}>
-                    <Text
-                        style={styles.distanceHeaderText}
-                    >From a Distance</Text>
-                </View>
-
-                <FlatList
-                    data={profileItems}
-                    renderItem={renderItem}
-                    keyExtractor={(item) => item.id}
-                    horizontal
-                    bounces={false}
-                    showsHorizontalScrollIndicator={false}
-                    showsVerticalScrollIndicator={false}
-                />
-            </ScrollView>
+            ) : (
+                <Text style={styles.successHeader}>No other users in your area...</Text>
+            )}
         </View >
     );
 }
@@ -669,7 +590,14 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: '#93CE89',
     },
-    carouselItem: {
+    profilesFlatlist: {
+        flexDirection: 'column',
+        justifyContent: 'center',
+        alignItems: 'center',
+        gap: 20,
+        paddingBottom: 100
+    },
+    flatlistItem: {
         width: 350,
         height: 350,
         borderColor: '#F8EEDF',
@@ -677,7 +605,6 @@ const styles = StyleSheet.create({
         borderWidth: 10,
         borderRadius: 15,
         backgroundColor: '#CA5038',
-        marginHorizontal: Dimensions.get('window').width * 0.1,
     },
     successOverlayContent: {
         width: '80%',

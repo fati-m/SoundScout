@@ -13,6 +13,7 @@ import RecommendIcon from '../assets/logo/recommend.svg';
 import RecenterIcon from '../assets/logo/recenter.svg';
 import {
     fetchUserProfile,
+    fetchNearbyUsers,
     syncUserDataPeriodically,
     isGhostMode,
     isSongLiked,
@@ -41,6 +42,7 @@ export default function Map({ navigation, route }) {
     });
     const fadeAnim = useRef(new Animated.Value(1)).current;
     const [successMessage, setSuccessMessage] = useState(route.params?.successMessage || '');
+    const [nearbyUsers, setNearbyUsers] = useState([]);
 
     useEffect(() => {
         const initializeMap = async () => {
@@ -72,18 +74,51 @@ export default function Map({ navigation, route }) {
         return () => clearInterval(syncInterval);
     }, []);
 
+    const fetchNearbyUserProfiles = async () => {
+        try {
+            const userId = await AsyncStorage.getItem('spotifyUserId');
+            if (!userId) throw new Error('User ID not found.');
+
+            const users = await fetchNearbyUsers(userId);
+            setNearbyUsers(users || []);
+        } catch (error) {
+            console.error('Error fetching nearby users:', error.message);
+            Alert.alert('Error', 'Unable to fetch nearby users.');
+        }
+    };
+
+    useEffect(() => {
+        fetchNearbyUserProfiles();
+    }, []);
+
+    const calculateDistanceInMiles = (lat1, lon1, lat2, lon2) => {
+        const toRadians = (degrees) => degrees * (Math.PI / 180);
+
+        const earthRadiusInMiles = 3958.8;
+        const dLat = toRadians(lat2 - lat1);
+        const dLon = toRadians(lon2 - lon1);
+
+        const a =
+            Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos(toRadians(lat1)) * Math.cos(toRadians(lat2)) *
+            Math.sin(dLon / 2) * Math.sin(dLon / 2);
+
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+        return earthRadiusInMiles * c;
+    };
+
     let syncInterval;
     const startPeriodicSync = (userId) => {
         syncInterval = setInterval(async () => {
             try {
                 await syncUserDataPeriodically(userId);
+                await fetchNearbyUserProfiles();
             } catch (error) {
                 console.error('Error syncing user data periodically:', error.message);
             }
         }, 30000);
     };
-
-    // Location Tracking
     const startTrackingLocation = async () => {
         try {
             const { status } = await Location.requestForegroundPermissionsAsync();
@@ -228,9 +263,8 @@ export default function Map({ navigation, route }) {
                             latitude: currentRegion.latitude,
                             longitude: currentRegion.longitude,
                         }}
-                        title="You are here"
+                        title="You"
                         onPress={async () => {
-                            setIsLoading(true);
                             try {
                                 const userId = await AsyncStorage.getItem('spotifyUserId');
                                 const cachedProfile = JSON.parse(await AsyncStorage.getItem('userData'));
@@ -249,8 +283,6 @@ export default function Map({ navigation, route }) {
                             } catch (error) {
                                 console.error("Error syncing user data:", error.message);
                                 Alert.alert("Error", "Failed to fetch user music data. Try Again.");
-                            } finally {
-                                setIsLoading(false);
                             }
                         }}
                     >
@@ -263,6 +295,25 @@ export default function Map({ navigation, route }) {
                             ]}
                         />
                     </Marker>
+                    {nearbyUsers.map((user, index) => (
+                        <Marker
+                            key={index}
+                            coordinate={{
+                                latitude: user.location.latitude,
+                                longitude: user.location.longitude,
+                            }}
+                            title={user.username || 'Unknown User'}
+                            onPress={() => {
+                                setUserData(user); // Set clicked user data to display in overlay
+                                setIsOverlayVisible(true);
+                            }}
+                        >
+                            <Image
+                                source={require('../assets/logo/userMarker.png')}
+                                style={styles.markerImage}
+                            />
+                        </Marker>
+                    ))}
                 </MapView>
             ) : null}
             <View style={styles.menuRecenterContainer}>
@@ -307,14 +358,6 @@ export default function Map({ navigation, route }) {
                                 <Text style={styles.menuText}>Settings</Text>
                             </View>
                             {/* Add additional menu items here */}
-                            {/* <View style={styles.menuItemContainer}>
-                                <TouchableOpacity
-                                    style={styles.menuItem}
-                                    onPress={() => navigation.navigate('Recommendations')}>
-                                    <RecommendIcon width={50} height={50} />
-                                </TouchableOpacity>
-                                <Text style={styles.menuText}>You'll Like</Text>
-                            </View> */}
                         </View>
                         <View style={styles.menuTitleContainer}>
                             <Text style={styles.menuTitle}>MAIN MENU</Text>
@@ -345,7 +388,15 @@ export default function Map({ navigation, route }) {
                                 )}
                                 <View style={styles.userSummaryText}>
                                     <Text style={styles.userName}>{userData.username || 'Unknown User'}</Text>
-                                    <Text style={styles.userDistance}>This is you</Text>
+                                    <Text style={styles.userDistance}>{nearbyUsers.some(user => user.location.latitude === userData.location.latitude &&
+                                        user.location.longitude === userData.location.longitude)
+                                        ? `${calculateDistanceInMiles(
+                                            currentRegion.latitude,
+                                            currentRegion.longitude,
+                                            userData.location.latitude,
+                                            userData.location.longitude
+                                        ).toFixed(2)} miles away`
+                                        : 'This is you'}</Text>
                                 </View>
                             </View>
 
