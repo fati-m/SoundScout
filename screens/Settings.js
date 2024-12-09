@@ -195,12 +195,11 @@ export default function Settings({ navigation }) {
             }
     
             // Check if new password matches the confirmation password
-            if (tempNewPassword && newPassword !== confirmPassword) {
+            if (newPassword != confirmPassword) {
                 setErrorMessage('Passwords do not match.');
                 return;
             } if (
-                tempNewPassword &&
-                (tempNewPassword.length < 8 || !/[A-Z]/.test(tempNewPassword) || !/[0-9]/.test(tempNewPassword))
+                (newPassword.length < 8 || !/[A-Z]/.test(newPassword) || !/[0-9]/.test(newPassword))
             ) {
                 setErrorMessage(
                     'Password must be at least 8 characters long, include one uppercase letter, and one number.'
