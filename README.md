@@ -141,7 +141,7 @@ If you'd prefer to test on an emulator, follow these steps:
   - Playlist additions
   - Ghost mode
 
-#### 3. Profile Management & Privacy
+#### 2. Profile Management & Privacy
 - Enabled users to modify profile settings and reflect to Firebase in real time
 - Store all location data to be plotted on the map
 - Implemented an **account deletion** feature with the following considerations:
