@@ -94,13 +94,6 @@ If you'd prefer to test on an emulator, follow these steps:
   - Install Android Studio and set up an Android Virtual Device (AVD).
   - Start the Android emulator from Expo by pressing `a` in the terminal after running `npx expo start`.
 
-### Project Structure
-
-- `App.js`: Main entry point of the application.
-- `AppNavigator.js`: Sets up the navigation between screens.
-- `screens/LoginScreen.js`: Contains the login screen layout and styles.
-- `assets/logo/`: Directory for images and other media assets (e.g., `SoundScout.gif`).
-
 ### Troubleshooting
 
 - **Metro Bundler Issues**: If you encounter errors related to Metro bundler, try restarting the server with cache cleared:
@@ -117,16 +110,32 @@ If you'd prefer to test on an emulator, follow these steps:
 - `npm install <package>`: Install a new package.
 - `npx expo start -c`: Start the Expo server with cache cleared.
 
-### Contributing
+### Authors
 
-When adding or updating code, make sure to:
+Frontend: Fatimah Mohammed, Malachi Clark
+Backend: Nathaniel Owusu, Syprian Oduor
 
-1. Pull the latest code from `main`.
-2. Create a new branch for your feature or bug fix.
-3. Commit and push your changes to your branch.
-4. Open a pull request for review.
+### Contributions
+
+### Backend Implementations
+
+#### 1. Database Setup & Data Management
+- Configured **Google Firebase** instance as the primary  database 
+- Developed functionality to store, update, and track user information, such as:
+  - User ID
+  - Profile information (profile picturem, username, email, and encrypted password)
+  - Liked songs
+  - Current playing song
+  - Real-time geo location
+  - Playlist additions
+  - Ghost mode
+
+#### 3. Profile Management & Privacy
+- Enabled users to modify profile settings and reflect to Firebase in real time
+- Store all location data to be plotted on the map
+- Implemented an **account deletion** feature with the following considerations:
+  - Securely removed user data from the database.
+  - Anonymized sensitive data where necessary to protect user privacy.
+- Optimized backend services for scalability, security, and reliability
 
 ---
-
-Happy coding! 🎶
-
