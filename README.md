@@ -126,15 +126,36 @@ If you'd prefer to test on an emulator, follow these steps:
 
 ## Contributions
 
-### Frontend Implementations
+### Frontend Implementations (Fatimah & Malachi in collaboration)
 
-### Backend Implementations
+#### 1. Home Screen & Navigation
+- Developed the **home screen** as the central hub for accessing core app features.
+- Implemented navigation between key modules, including:
+  - Map screen - view other users and their current listens in map
+  - Grid screen - view other users and their current listens in grid list
+  - Liked songs screen - view list of songs you have liked
+  - Settings screen - place to toggle ghost mode, grid view, edit profile, sign out, and delete account
+- Ensured smooth transitions and a cohesive user experience across all screens.
+
+#### 2. Profile Creation & Customization
+- Built the sign up interface for first time users
+  - Upload profile pictures
+  - Enter usernames
+  - Enter password
+- Enabled real-time updates for editable profile details, reflected in the app.
+
+#### 3. Real-Time Music Updates
+- Utilized the **Spotify API** to display:
+  - Users' currently playing songs on their profiles.
+  - List of user playlists to add a song to a selected one
+
+### Backend Implementations (Nate & Syprian in collaboration)
 
 #### 1. Database Setup & Data Management
 - Configured **Google Firebase** instance as the primary  database 
 - Developed functionality to store, update, and track user information, such as:
   - User ID
-  - Profile information (profile picturem, username, email, and encrypted password)
+  - Profile information (profile picture, username, email, and encrypted password)
   - Liked songs
   - Current playing song
   - Real-time geo location
