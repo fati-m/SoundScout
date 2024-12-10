@@ -117,7 +117,9 @@ Backend: Nathaniel Owusu, Syprian Oduor
 
 ### Contributions
 
-### Backend Implementations
+#### Frontend Implementations
+
+#### Backend Implementations
 
 #### 1. Database Setup & Data Management
 - Configured **Google Firebase** instance as the primary  database 
