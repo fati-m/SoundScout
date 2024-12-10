@@ -2,6 +2,15 @@
 
 SoundScout is a cross-platform mobile application designed to help users discover new music based on nearby listeners, combating the "music slump." The app leverages location-based social discovery and real-time interaction to promote music exploration.
 
+## Table of Contents
+- [Project Setup Instructions](#project-setup-instructions)
+- [Prerequisites](#prerequisites)
+- [Clone the Repository](#clone-the-repository)
+- [Install Dependencies](#install-dependencies)
+- [Running the App](#running-the-app)
+- [Authors](#authors)
+- [Contributions](#contributions)
+
 ## Project Setup Instructions
 
 Follow these steps to set up the project on your local machine. Instructions cover both macOS and Windows.
@@ -63,7 +72,7 @@ npm install
 
 This will install all necessary packages, including `react-navigation` and other dependencies.
 
-### Running the App
+## Running the App
 
 #### 1. Start the Expo Development Server
 
@@ -110,16 +119,16 @@ If you'd prefer to test on an emulator, follow these steps:
 - `npm install <package>`: Install a new package.
 - `npx expo start -c`: Start the Expo server with cache cleared.
 
-### Authors
+## Authors
 
-Frontend: Fatimah Mohammed, Malachi Clark
-Backend: Nathaniel Owusu, Syprian Oduor
+- Frontend: Fatimah Mohammed, Malachi Clark
+- Backend: Nathaniel Owusu, Syprian Oduor
 
-### Contributions
+## Contributions
 
-#### Frontend Implementations
+### Frontend Implementations
 
-#### Backend Implementations
+### Backend Implementations
 
 #### 1. Database Setup & Data Management
 - Configured **Google Firebase** instance as the primary  database 
@@ -139,5 +148,3 @@ Backend: Nathaniel Owusu, Syprian Oduor
   - Securely removed user data from the database.
   - Anonymized sensitive data where necessary to protect user privacy.
 - Optimized backend services for scalability, security, and reliability
-
----
