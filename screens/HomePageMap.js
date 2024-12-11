@@ -27,7 +27,7 @@ import { useFocusEffect } from '@react-navigation/native';
 // the main configuration for the Map Home Screen
 export default function Map({ navigation, route }) {
     const mapRef = useRef(null);
-    const [isLoading, setIsLoading] = useState(true);
+    const [isLoading, setIsLoading] = useState(false);
     const [currentRegion, setCurrentRegion] = useState(null);
     const [isGhostModeEnabled, setIsGhostModeEnabled] = useState(false);
     const [isGridViewEnabled, setIsGridViewEnabled] = useState(false);

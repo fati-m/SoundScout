@@ -73,17 +73,17 @@ export default function SignUp({ route, navigation }) {
             }
 
             const result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: 'images',
                 allowsEditing: true,
                 aspect: [1, 1],
                 quality: 1,
             });
 
-            if (!result.canceled && result.assets && result.assets.length > 0) {
-                const selectedImage = result.assets[0].uri;
-                setProfilePic(selectedImage);
+            if (!result.canceled) {
+                setProfilePic(result.assets[0].uri);
             }
         } catch (error) {
-            console.error('Error changing profile picture:', error.message);
+            console.error('Error selecting profile picture:', error);
         } finally {
             setIsLoading(false);
         }

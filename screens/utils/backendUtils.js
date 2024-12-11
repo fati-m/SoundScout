@@ -25,27 +25,6 @@ bcrypt.setRandomFallback((len) => {
 export const createAccount = async (userProfile) => {
   try {
     let profilePicUrl = userProfile.profilePicUri;
-
-    if (profilePicUrl && !profilePicUrl.startsWith("http")) {
-      const fileInfo = await FileSystem.getInfoAsync(profilePicUrl);
-      if (!fileInfo.exists) {
-        throw new Error("Selected file does not exist.");
-      }
-
-      const fileName = `${userProfile.id}_profilePic.jpg`;
-      const storageRef = ref(storage, `profilePictures/${fileName}`);
-
-      const response = await fetch(profilePicUrl);
-      if (!response.ok) {
-        throw new Error("Failed to fetch the file.");
-      }
-
-      const blob = await response.blob();
-      const uploadResult = await uploadBytes(storageRef, blob);
-
-      profilePicUrl = await getDownloadURL(uploadResult.ref);
-    }
-
     const salt = bcrypt.genSaltSync(10);
     const hashedPassword = bcrypt.hashSync(userProfile.password, salt);
 
