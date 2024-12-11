@@ -124,6 +124,26 @@ export default function Grid({ navigation, route }) {
         }, 30000);
     };
 
+    // Clear intervals during sign-out or unmount
+    const clearPeriodicSync = () => {
+        if (syncInterval) {
+            clearInterval(syncInterval);
+            syncInterval = null;
+        }
+    };
+
+    useEffect(() => {
+        return () => clearPeriodicSync(); // Ensures cleanup on component unmount
+    }, []);
+
+    useFocusEffect(
+        React.useCallback(() => {
+            const userId = AsyncStorage.getItem('spotifyUserId');
+            if (!userId) clearPeriodicSync(); // Prevent data sync if signed out
+            return () => clearPeriodicSync(); // Cleanup on navigation away
+        }, [])
+    );
+
     const startTrackingLocation = async () => {
         try {
             const { status } = await Location.requestForegroundPermissionsAsync();

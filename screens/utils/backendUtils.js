@@ -457,6 +457,7 @@ export const toggleGridView = async (enabled, { navigation }) => {
  */
 export const syncUserDataPeriodically = async (userId) => {
   try {
+    if (!userId) return;
     const accessToken = await AsyncStorage.getItem('spotifyAccessToken');
     if (!accessToken) throw new Error('Spotify access token is missing.');
 

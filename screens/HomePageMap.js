@@ -22,6 +22,7 @@ import {
     isGridView,
 } from './utils/backendUtils';
 import * as Location from 'expo-location';
+import { useFocusEffect } from '@react-navigation/native';
 
 // the main configuration for the Map Home Screen
 export default function Map({ navigation, route }) {
@@ -119,6 +120,27 @@ export default function Map({ navigation, route }) {
             }
         }, 30000);
     };
+
+    // Clear intervals during sign-out or unmount
+    const clearPeriodicSync = () => {
+        if (syncInterval) {
+            clearInterval(syncInterval);
+            syncInterval = null;
+        }
+    };
+
+    useEffect(() => {
+        return () => clearPeriodicSync(); // Ensures cleanup on component unmount
+    }, []);
+
+    useFocusEffect(
+        React.useCallback(() => {
+            const userId = AsyncStorage.getItem('spotifyUserId');
+            if (!userId) clearPeriodicSync(); // Prevent data sync if signed out
+            return () => clearPeriodicSync(); // Cleanup on navigation away
+        }, [])
+    );
+
     const startTrackingLocation = async () => {
         try {
             const { status } = await Location.requestForegroundPermissionsAsync();
